@@ -1,4 +1,7 @@
-# OpenBerth
+
+<p align="center">
+  <img width="2017" height="556" alt="Frame 17" src="https://github.com/user-attachments/assets/a05bb416-a5b7-4ced-869f-db75a73d23cd" />
+</p>
 
 A self-hosted deployment platform. Give it code, get a live URL.
 
@@ -7,7 +10,7 @@ berth deploy ./my-project --name my-project
 # => https://my-project.openberth.example.com
 ```
 
-Supports Node.js (Next.js, Vite, Nuxt, SvelteKit), Python (Django, FastAPI, Flask), Go, and static HTML. Every deployment runs sandboxed in gVisor containers with automatic TLS. Written entirely in Go — three static binaries, zero runtime dependencies.
+Supports Node.js (Next.js, Vite, Nuxt, SvelteKit), Python (Django, FastAPI, Flask), Go, and static HTML. Every deployment runs sandboxed in gVisor containers with automatic TLS. Written entirely in Go — three static binaries, zero runtime dependencies. Supports Sandbox (with hot-reload), resource allocation, simple and advanced protection methods.
 
 ## Quick Start
 
