@@ -117,6 +117,8 @@ cd apps/cli && go build ./... && go vet ./...
 ### Go Workspace
 This is a **Go workspace** (`go.work`) with three independent modules (server, cli, mcp). Each app has its own `go.mod`. Don't add cross-module dependencies — the CLI and MCP are intentionally dependency-free from the server.
 
+**Shared logic by copy, not import:** When the CLI and MCP need the same utility code (e.g., tarball creation with `.gitignore`/`.berthignore` support), duplicate it in both modules rather than extracting a shared library. Keep the copies in sync when making changes to either.
+
 ### Server Architecture
 
 **Request flow:** HTTP handler (`internal/httphandler/`) → Service method (`internal/service/`) → internal packages (store, container, proxy, framework)
