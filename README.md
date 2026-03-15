@@ -25,37 +25,25 @@ A     *.openberth.example.com     → your-server-ip
 
 ### 2. Install the server
 
-Download the server binary from [Releases](https://github.com/AmirSoleimani/openberth/releases), then copy it to a fresh Ubuntu 22.04/24.04 VM:
+SSH into a fresh Ubuntu 22.04/24.04 VM and run:
 
 ```bash
-scp berth-server-linux-amd64 root@your-server:/tmp/berth-server
-ssh root@your-server
-
-chmod +x /tmp/berth-server
-/tmp/berth-server install --domain openberth.example.com
+curl -fsSL https://openberth.io/install-server.sh | bash
+berth-server install --domain openberth.example.com
 ```
 
 Done in ~2 minutes. The installer sets up Docker, gVisor, Caddy, SQLite, and systemd. It prints your admin API key at the end.
 
 ### 3. Install the CLI
 
-Download the CLI for your platform from [Releases](https://github.com/AmirSoleimani/openberth/releases):
-
-| Platform | Binary |
-|----------|--------|
-| macOS (Apple Silicon) | `berth-darwin-arm64` |
-| macOS (Intel) | `berth-darwin-amd64` |
-| Linux | `berth-linux-amd64` |
-| Windows | `berth-windows-amd64.exe` |
-
 ```bash
-# macOS example:
-chmod +x berth-darwin-arm64
-sudo mv berth-darwin-arm64 /usr/local/bin/berth
+curl -fsSL https://openberth.io/install.sh | bash
 
 berth config set server https://openberth.example.com
 berth config set key sc_your_admin_key
 ```
+
+Auto-detects your OS and architecture. Or download manually from [Releases](https://github.com/AmirSoleimani/openberth/releases).
 
 ### 4. Deploy something
 
