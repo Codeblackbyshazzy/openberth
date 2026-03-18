@@ -54,7 +54,7 @@ berth deploy --network-quota 5g         # Set network transfer quota
 
 ### Single-File Deploy
 
-Deploy any `.jsx`, `.tsx`, `.vue`, `.svelte`, or `.html` file directly — the CLI auto-scaffolds a Vite project:
+Deploy any `.jsx`, `.tsx`, `.vue`, `.svelte`, `.html`, `.md`, or `.ipynb` file directly — the CLI auto-scaffolds a deployable project:
 
 ```bash
 berth deploy App.jsx           # React
@@ -62,9 +62,11 @@ berth deploy dashboard.tsx     # React + TypeScript
 berth deploy Widget.vue        # Vue
 berth deploy Counter.svelte    # Svelte
 berth deploy page.html         # Static HTML
+berth deploy README.md         # Markdown (client-side rendered)
+berth deploy analysis.ipynb    # Jupyter Notebook (static HTML)
 ```
 
-The scaffolder parses all `import` statements to detect dependencies, detects Tailwind CSS usage from class names, and produces a complete build-ready project. By the time the tarball reaches the server, it looks like any other Vite project.
+For JS frameworks, the scaffolder parses all `import` statements to detect dependencies, detects Tailwind CSS usage from class names, and produces a complete build-ready project. Markdown and notebook files are rendered as self-contained static HTML (markdown via marked.js CDN, notebooks with styled code cells and pre-rendered outputs).
 
 ## Dev (Sandbox)
 

@@ -182,16 +182,18 @@ Only `language` and `start` are required for unrecognized projects. All fields a
 
 ### Single-File Deploy
 
-Deploy `.jsx`, `.tsx`, `.vue`, `.svelte`, or `.html` files directly — the CLI auto-scaffolds a Vite project:
+Deploy `.jsx`, `.tsx`, `.vue`, `.svelte`, `.html`, `.md`, or `.ipynb` files directly — the CLI auto-scaffolds a deployable project:
 
 ```bash
 berth deploy App.jsx           # React
 berth deploy dashboard.tsx     # React + TypeScript
 berth deploy Widget.vue        # Vue
 berth deploy Counter.svelte    # Svelte
+berth deploy README.md         # Markdown (rendered with marked.js)
+berth deploy analysis.ipynb    # Jupyter Notebook (rendered as static HTML)
 ```
 
-The scaffolder parses imports to detect dependencies, detects Tailwind from class names, and produces a build-ready project.
+The scaffolder parses imports to detect dependencies, detects Tailwind from class names, and produces a build-ready project. Markdown and notebook files are rendered as static HTML with no server-side processing.
 
 ## Persistent Data
 

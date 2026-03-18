@@ -114,8 +114,8 @@ func printHelp() {
     --network-quota <q> Network transfer quota (e.g. 1g, 5g, 10g)
 
   %sSINGLE-FILE MODE%s
-    Deploy or dev .jsx, .tsx, .vue, .svelte, or .html files directly.
-    Auto-scaffolds with Vite + Tailwind CSS.
+    Deploy or dev .jsx, .tsx, .vue, .svelte, .html, .md, or .ipynb files directly.
+    Auto-scaffolds with Vite + Tailwind CSS (or static HTML for .md/.ipynb).
 
   %sEXAMPLES%s
     berth init                          Configure project for OpenBerth

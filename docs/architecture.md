@@ -294,7 +294,7 @@ Memory and CPU are configurable per deployment on both `deploy` and `update`.
 
 ## Single-File Deploy
 
-The CLI scaffolds complete Vite projects from single `.jsx`, `.tsx`, `.vue`, `.svelte`, or `.html` files. The scaffolder parses imports to detect dependencies, detects Tailwind from class names, and produces a build-ready project. By the time the tarball reaches the server, it looks like any other Vite project.
+The CLI scaffolds deployable projects from single `.jsx`, `.tsx`, `.vue`, `.svelte`, `.html`, `.md`, or `.ipynb` files. For JS frameworks, the scaffolder parses imports to detect dependencies, detects Tailwind from class names, and produces a Vite project. Markdown and notebook files are rendered as self-contained static `index.html` files (markdown via marked.js CDN, notebooks with styled code/output cells). By the time the tarball reaches the server, it looks like any other project.
 
 ## File Layout on Server
 
