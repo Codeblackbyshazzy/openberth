@@ -28,7 +28,7 @@ func (s *MCPServer) apiPost(path string, body json.RawMessage) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (s *MCPServer) apiUpload(path, tarballPath string, fields map[string]string, envVars map[string]string) ([]byte, error) {
+func (s *MCPServer) apiUpload(path, tarballPath string, fields map[string]string, envVars map[string]string, secrets []string) ([]byte, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
@@ -38,6 +38,9 @@ func (s *MCPServer) apiUpload(path, tarballPath string, fields map[string]string
 	}
 	for k, v := range envVars {
 		writer.WriteField("env", k+"="+v)
+	}
+	for _, name := range secrets {
+		writer.WriteField("secrets", name)
 	}
 
 	// Add tarball

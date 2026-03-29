@@ -296,6 +296,7 @@ func createNewSandbox(client *APIClient) (sandboxID, sandboxURL, projectDir stri
 	name := getFlag("name", "")
 	ttl := getFlag("ttl", "4h")
 	envVars := getFlags("env")
+	secrets := getFlags("secret")
 	memory := getFlag("memory", "")
 	port := getFlag("port", "")
 	protectMode := getFlag("protect", "")
@@ -325,6 +326,9 @@ func createNewSandbox(client *APIClient) (sandboxID, sandboxURL, projectDir stri
 	}
 	if networkQuota == "" {
 		networkQuota = pCfg.NetworkQuota
+	}
+	if len(pCfg.Secrets) > 0 && len(secrets) == 0 {
+		secrets = pCfg.Secrets
 	}
 
 	// Resolve target: single file or directory
@@ -447,6 +451,9 @@ func createNewSandbox(client *APIClient) (sandboxID, sandboxURL, projectDir stri
 			}
 		}
 		body["env"] = envMap
+	}
+	if len(secrets) > 0 {
+		body["secrets"] = secrets
 	}
 
 	result, err := client.RequestJSON("POST", "/api/sandbox", body)

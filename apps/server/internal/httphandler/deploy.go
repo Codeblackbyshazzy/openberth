@@ -70,6 +70,7 @@ func (h *Handlers) Deploy(w http.ResponseWriter, r *http.Request) {
 		TTL:             r.FormValue("ttl"),
 		Port:            port,
 		EnvVars:         parseEnvVars(r),
+		Secrets:         parseSecrets(r),
 		Memory:          r.FormValue("memory"),
 		CPUs:            r.FormValue("cpus"),
 		NetworkQuota:    r.FormValue("network_quota"),
@@ -135,6 +136,7 @@ func (h *Handlers) Update(w http.ResponseWriter, r *http.Request) {
 		File:         file,
 		Port:         port,
 		EnvVars:      parseEnvVars(r),
+		Secrets:      parseSecrets(r),
 		Memory:       r.FormValue("memory"),
 		CPUs:         r.FormValue("cpus"),
 		NetworkQuota: r.FormValue("network_quota"),
@@ -180,6 +182,7 @@ type CodeDeployRequest struct {
 	TTL             string            `json:"ttl,omitempty"`
 	Port            int               `json:"port,omitempty"`
 	Env             map[string]string `json:"env,omitempty"`
+	Secrets         []string          `json:"secrets,omitempty"`
 	Memory          string            `json:"memory,omitempty"`
 	CPUs            string            `json:"cpus,omitempty"`
 	NetworkQuota    string            `json:"network_quota,omitempty"`
@@ -209,6 +212,7 @@ func (h *Handlers) DeployCode(w http.ResponseWriter, r *http.Request) {
 		TTL:             req.TTL,
 		Port:            req.Port,
 		Env:             req.Env,
+		Secrets:         req.Secrets,
 		Memory:          req.Memory,
 		CPUs:            req.CPUs,
 		NetworkQuota:    req.NetworkQuota,
@@ -246,6 +250,7 @@ func (h *Handlers) UpdateCode(w http.ResponseWriter, r *http.Request) {
 		Files:        req.Files,
 		Port:         req.Port,
 		Env:          req.Env,
+		Secrets:      req.Secrets,
 		Memory:       req.Memory,
 		CPUs:         req.CPUs,
 		NetworkQuota: req.NetworkQuota,

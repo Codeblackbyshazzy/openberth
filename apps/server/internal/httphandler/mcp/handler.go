@@ -217,6 +217,12 @@ func (m *MCPHandler) callTool(name string, args json.RawMessage, user *store.Use
 		return m.toolSandboxPromote(args, user)
 	case "berth_update_quota":
 		return m.toolUpdateQuota(args, user)
+	case "berth_secret_set":
+		return m.toolSecretSet(args, user)
+	case "berth_secret_list":
+		return m.toolSecretList(user)
+	case "berth_secret_delete":
+		return m.toolSecretDelete(args, user)
 	default:
 		return errorResult("Unknown tool: " + name)
 	}
@@ -229,6 +235,7 @@ func (m *MCPHandler) toolDeploy(args json.RawMessage, user *store.User) *mcpTool
 		Title           string            `json:"title"`
 		Description     string            `json:"description"`
 		Env             map[string]string `json:"env"`
+		Secrets         []string          `json:"secrets"`
 		Port            int               `json:"port"`
 		Memory          string            `json:"memory"`
 		NetworkQuota    string            `json:"network_quota"`
@@ -249,6 +256,7 @@ func (m *MCPHandler) toolDeploy(args json.RawMessage, user *store.User) *mcpTool
 		TTL:             params.TTL,
 		Port:            params.Port,
 		Env:             params.Env,
+		Secrets:         params.Secrets,
 		Memory:          params.Memory,
 		NetworkQuota:    params.NetworkQuota,
 		ProtectMode:     params.ProtectMode,
@@ -277,6 +285,7 @@ func (m *MCPHandler) toolUpdate(args json.RawMessage, user *store.User) *mcpTool
 		ID           string            `json:"id"`
 		Files        map[string]string `json:"files"`
 		Env          map[string]string `json:"env"`
+		Secrets      []string          `json:"secrets"`
 		Port         int               `json:"port"`
 		Memory       string            `json:"memory"`
 		NetworkQuota string            `json:"network_quota"`
@@ -288,6 +297,7 @@ func (m *MCPHandler) toolUpdate(args json.RawMessage, user *store.User) *mcpTool
 		Files:        params.Files,
 		Port:         params.Port,
 		Env:          params.Env,
+		Secrets:      params.Secrets,
 		Memory:       params.Memory,
 		NetworkQuota: params.NetworkQuota,
 	})
@@ -438,6 +448,7 @@ func (m *MCPHandler) toolSandboxCreate(args json.RawMessage, user *store.User) *
 		Files           map[string]string `json:"files"`
 		Name            string            `json:"name"`
 		Env             map[string]string `json:"env"`
+		Secrets         []string          `json:"secrets"`
 		Port            int               `json:"port"`
 		Memory          string            `json:"memory"`
 		NetworkQuota    string            `json:"network_quota"`
@@ -456,6 +467,7 @@ func (m *MCPHandler) toolSandboxCreate(args json.RawMessage, user *store.User) *
 		TTL:             params.TTL,
 		Port:            params.Port,
 		Env:             params.Env,
+		Secrets:         params.Secrets,
 		Memory:          params.Memory,
 		NetworkQuota:    params.NetworkQuota,
 		ProtectMode:     params.ProtectMode,
@@ -594,6 +606,7 @@ func (m *MCPHandler) toolSandboxPromote(args json.RawMessage, user *store.User) 
 		Memory       string            `json:"memory"`
 		NetworkQuota string            `json:"network_quota"`
 		Env          map[string]string `json:"env"`
+		Secrets      []string          `json:"secrets"`
 	}
 	json.Unmarshal(args, &params)
 
@@ -607,6 +620,7 @@ func (m *MCPHandler) toolSandboxPromote(args json.RawMessage, user *store.User) 
 		Memory:       params.Memory,
 		NetworkQuota: params.NetworkQuota,
 		Env:          params.Env,
+		Secrets:      params.Secrets,
 	})
 	if err != nil {
 		return errorResult(err.Error())
@@ -660,6 +674,61 @@ func (m *MCPHandler) toolUpdateQuota(args json.RawMessage, user *store.User) *mc
 		msg = fmt.Sprintf("Network quota set to %s for deployment %s.", result.NetworkQuota, params.ID)
 	}
 	return textResult(msg)
+}
+
+// ── Secret Tool Handlers ─────────────────────────────────────────────
+
+func (m *MCPHandler) toolSecretSet(args json.RawMessage, user *store.User) *mcpToolResult {
+	var params struct {
+		Name        string `json:"name"`
+		Value       string `json:"value"`
+		Description string `json:"description"`
+		Global      bool   `json:"global"`
+	}
+	json.Unmarshal(args, &params)
+
+	result, err := m.svc.SecretSet(user, params.Name, params.Value, params.Description, params.Global)
+	if err != nil {
+		return errorResult(err.Error())
+	}
+
+	action := "updated"
+	if result.Created {
+		action = "created"
+	}
+	msg := fmt.Sprintf("Secret '%s' %s.", result.Name, action)
+	if len(result.Restarted) > 0 {
+		msg += fmt.Sprintf("\nRestarted deployments: %s", strings.Join(result.Restarted, ", "))
+	}
+	return textResult(msg)
+}
+
+func (m *MCPHandler) toolSecretList(user *store.User) *mcpToolResult {
+	secrets, err := m.svc.SecretList(user)
+	if err != nil {
+		return errorResult(err.Error())
+	}
+
+	if len(secrets) == 0 {
+		return textResult("No secrets stored. Use berth_secret_set to create one.")
+	}
+
+	pretty, _ := json.MarshalIndent(secrets, "", "  ")
+	return textResult(string(pretty))
+}
+
+func (m *MCPHandler) toolSecretDelete(args json.RawMessage, user *store.User) *mcpToolResult {
+	var params struct {
+		Name   string `json:"name"`
+		Global bool   `json:"global"`
+	}
+	json.Unmarshal(args, &params)
+
+	if err := m.svc.SecretDelete(user, params.Name, params.Global); err != nil {
+		return errorResult(err.Error())
+	}
+
+	return textResult(fmt.Sprintf("Secret '%s' deleted.", params.Name))
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

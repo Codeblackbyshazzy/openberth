@@ -30,6 +30,11 @@ func (s *MCPServer) tools() []Tool {
 						"type":        "object",
 						"description": "Environment variables as key-value pairs (optional)",
 					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
+					},
 					"port": map[string]interface{}{
 						"type":        "integer",
 						"description": "Port the app listens on (optional, auto-detected)",
@@ -88,6 +93,11 @@ func (s *MCPServer) tools() []Tool {
 					"env": map[string]interface{}{
 						"type":        "object",
 						"description": "Environment variables as key-value pairs (optional)",
+					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
 					},
 					"port": map[string]interface{}{
 						"type":        "string",
@@ -148,6 +158,11 @@ func (s *MCPServer) tools() []Tool {
 						"type":        "object",
 						"description": "Environment variables (optional)",
 					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
+					},
 					"port": map[string]interface{}{
 						"type":        "integer",
 						"description": "Port override (optional)",
@@ -181,6 +196,11 @@ func (s *MCPServer) tools() []Tool {
 					"env": map[string]interface{}{
 						"type":        "object",
 						"description": "Environment variables (optional)",
+					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
 					},
 					"port": map[string]interface{}{
 						"type":        "string",
@@ -337,6 +357,11 @@ func (s *MCPServer) tools() []Tool {
 					"env": map[string]interface{}{
 						"type":        "object",
 						"description": "Environment variables as key-value pairs (optional)",
+					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
 					},
 					"port": map[string]interface{}{
 						"type":        "integer",
@@ -509,6 +534,11 @@ func (s *MCPServer) tools() []Tool {
 						"type":        "object",
 						"description": "Environment variables to set (optional, merged with existing)",
 					},
+					"secrets": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]interface{}{"type": "string"},
+						"description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed.",
+					},
 				},
 				"required": []string{"id"},
 			},
@@ -529,6 +559,59 @@ func (s *MCPServer) tools() []Tool {
 					},
 				},
 				"required": []string{"id", "quota"},
+			},
+		},
+		// ── Secret tools ─────────────────────────────────────────────
+		{
+			Name:        "berth_secret_set",
+			Description: "Store an encrypted secret for use in deployments. Add a description so the secret can be discovered later via berth_secret_list. The value is encrypted at rest and can never be read back. If the secret already exists, its value is updated and all deployments using it are automatically restarted.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Secret name (used as the environment variable name)",
+					},
+					"value": map[string]interface{}{
+						"type":        "string",
+						"description": "Secret value (encrypted at rest, never returned by the API)",
+					},
+					"description": map[string]interface{}{
+						"type":        "string",
+						"description": "Human-readable description of what this secret is for (optional)",
+					},
+					"global": map[string]interface{}{
+						"type":        "boolean",
+						"description": "If true, the secret is available to all users (admin only). Default false.",
+					},
+				},
+				"required": []string{"name", "value"},
+			},
+		},
+		{
+			Name:        "berth_secret_list",
+			Description: "List stored secrets with names and descriptions (values are never returned). Use this to discover available secrets before deploying. Pass secret names to the 'secrets' parameter of berth_deploy or berth_sandbox_create.",
+			InputSchema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "berth_secret_delete",
+			Description: "Delete a stored secret by name.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Secret name to delete",
+					},
+					"global": map[string]interface{}{
+						"type":        "boolean",
+						"description": "If true, delete a global secret (admin only). Default false.",
+					},
+				},
+				"required": []string{"name"},
 			},
 		},
 	}

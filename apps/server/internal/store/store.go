@@ -45,6 +45,7 @@ type Deployment struct {
 	Memory       string `json:"memory,omitempty"`
 	CPUs         string `json:"cpus,omitempty"`
 	Locked       bool   `json:"locked"`
+	SecretsJSON  string `json:"secretsJson"`
 }
 
 type Store struct {
@@ -171,6 +172,25 @@ func (s *Store) ensureSchema() error {
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (deployment_id, period_start)
 	)`)
+
+	s.db.Exec(`CREATE TABLE IF NOT EXISTS secrets (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id TEXT REFERENCES users(id),
+		scope TEXT DEFAULT 'user',
+		name TEXT NOT NULL,
+		description TEXT DEFAULT '',
+		encrypted_dek BLOB NOT NULL,
+		dek_nonce BLOB NOT NULL,
+		ciphertext BLOB NOT NULL,
+		value_nonce BLOB NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(user_id, name)
+	)`)
+	s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_secrets_global_name ON secrets(name) WHERE user_id IS NULL`)
+
+	// Migration: add secrets_json to deployments
+	s.db.Exec("ALTER TABLE deployments ADD COLUMN secrets_json TEXT DEFAULT '[]'")
 
 	return nil
 }

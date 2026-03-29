@@ -134,6 +134,11 @@ func main() {
 		http.StripPrefix("/gallery/", galleryFileServer).ServeHTTP(w, r)
 	})
 
+	// Secrets
+	mux.HandleFunc("POST /api/secrets", h.SecretSet)
+	mux.HandleFunc("GET /api/secrets", h.SecretList)
+	mux.HandleFunc("DELETE /api/secrets/{name}", h.SecretDelete)
+
 	// Sandbox
 	mux.HandleFunc("POST /api/sandbox", h.SandboxCreate)
 	mux.HandleFunc("DELETE /api/sandbox/{id}", h.DestroyDeployment)
@@ -220,6 +225,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		p := r.URL.Path
 		needsCORS := strings.HasPrefix(p, "/api/deployments/") ||
 			strings.HasPrefix(p, "/api/sandbox/") ||
+			strings.HasPrefix(p, "/api/secrets") ||
 			p == "/api/gallery" ||
 			p == "/api/login/exchange" ||
 			p == "/api/me/password" ||

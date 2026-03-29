@@ -14,15 +14,16 @@ import (
 const projectConfigFile = ".berth.json"
 
 type ProjectConfig struct {
-	Name         string `json:"name,omitempty"`
-	TTL          string `json:"ttl,omitempty"`
-	Memory       string `json:"memory,omitempty"`
-	Port         string `json:"port,omitempty"`
-	Protect      string `json:"protect,omitempty"`
-	NetworkQuota string `json:"networkQuota,omitempty"`
-	DeploymentID string `json:"deploymentId,omitempty"`
-	URL          string `json:"url,omitempty"`
-	SandboxID    string `json:"sandboxId,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	TTL          string   `json:"ttl,omitempty"`
+	Memory       string   `json:"memory,omitempty"`
+	Port         string   `json:"port,omitempty"`
+	Protect      string   `json:"protect,omitempty"`
+	NetworkQuota string   `json:"networkQuota,omitempty"`
+	Secrets      []string `json:"secrets,omitempty"`
+	DeploymentID string   `json:"deploymentId,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	SandboxID    string   `json:"sandboxId,omitempty"`
 }
 
 func projectConfigPath(dir string) string {

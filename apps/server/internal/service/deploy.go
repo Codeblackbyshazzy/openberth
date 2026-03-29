@@ -80,7 +80,10 @@ func (svc *Service) DeployCode(user *store.User, p CodeDeployParams) (*DeployRes
 
 	ttlHours := ParseTTL(p.TTL, user.DefaultTTLHours)
 	port := resolvePort(p.Port, fw.Port)
-	envVars := ensureEnv(p.Env)
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, p.Secrets)
+	if err != nil {
+		return nil, err
+	}
 	expiresAt := computeExpiry(ttlHours)
 	resolvedQuota := svc.ResolveNetworkQuota(p.NetworkQuota)
 
@@ -100,6 +103,7 @@ func (svc *Service) DeployCode(user *store.User, p CodeDeployParams) (*DeployRes
 		Memory:       p.Memory,
 		CPUs:         p.CPUs,
 	})
+	svc.Store.UpdateDeploymentSecrets(id, p.Secrets)
 
 	aci, err := svc.setupAccessControl(id, codeDir, subdomain, p.ProtectMode, p.ProtectUsername, p.ProtectPassword, p.ProtectApiKey, p.ProtectUsers)
 	if err != nil {
@@ -157,6 +161,12 @@ func (svc *Service) UpdateCode(user *store.User, p CodeUpdateParams) (*UpdateRes
 		fullPath := filepath.Join(codeDir, clean)
 		os.MkdirAll(filepath.Dir(fullPath), 0755)
 		os.WriteFile(fullPath, []byte(content), 0644)
+	}
+
+	// Update stored secrets if provided
+	if len(p.Secrets) > 0 {
+		svc.Store.UpdateDeploymentSecrets(deploy.ID, p.Secrets)
+		deploy.SecretsJSON = marshalSecrets(p.Secrets)
 	}
 
 	return svc.detectAndRebuild(deploy, user.Name, p.Env, p.Port, p.Memory, p.CPUs, p.NetworkQuota, "update-code")

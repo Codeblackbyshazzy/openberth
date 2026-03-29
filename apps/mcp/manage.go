@@ -233,3 +233,87 @@ func (s *MCPServer) toolUpdateQuota(args json.RawMessage) *ToolResult {
 	}
 	return textResult(fmt.Sprintf("Network quota set to %s for deployment %s.", quota, params.ID))
 }
+
+// ── Secrets ─────────────────────────────────────────────────────────
+
+func (s *MCPServer) toolSecretSet(args json.RawMessage) *ToolResult {
+	var params struct {
+		Name string `json:"name"`
+	}
+	json.Unmarshal(args, &params)
+
+	if params.Name == "" {
+		return errorResult("Secret name required")
+	}
+
+	body, err := s.apiPost("/api/secrets", args)
+	if err != nil {
+		return errorResult("Secret set failed: " + err.Error())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	if errMsg, ok := resp["error"].(string); ok {
+		return errorResult("Secret set failed: " + errMsg)
+	}
+
+	msg, _ := resp["message"].(string)
+	if msg == "" {
+		msg = fmt.Sprintf("Secret '%s' stored.", params.Name)
+	}
+	return textResult(msg)
+}
+
+func (s *MCPServer) toolSecretList() *ToolResult {
+	body, err := s.apiGet("/api/secrets")
+	if err != nil {
+		return errorResult("Secret list failed: " + err.Error())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	if errMsg, ok := resp["error"].(string); ok {
+		return errorResult("Secret list failed: " + errMsg)
+	}
+
+	secrets, ok := resp["secrets"].([]interface{})
+	if !ok || len(secrets) == 0 {
+		return textResult("No secrets stored.")
+	}
+
+	pretty, _ := json.MarshalIndent(secrets, "", "  ")
+	return textResult(string(pretty))
+}
+
+func (s *MCPServer) toolSecretDelete(args json.RawMessage) *ToolResult {
+	var params struct {
+		Name   string `json:"name"`
+		Global bool   `json:"global"`
+	}
+	json.Unmarshal(args, &params)
+
+	if params.Name == "" {
+		return errorResult("Secret name required")
+	}
+
+	path := "/api/secrets/" + params.Name
+	if params.Global {
+		path += "?global=true"
+	}
+
+	body, err := s.apiDelete(path)
+	if err != nil {
+		return errorResult("Secret delete failed: " + err.Error())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	if errMsg, ok := resp["error"].(string); ok {
+		return errorResult("Secret delete failed: " + errMsg)
+	}
+
+	return textResult(fmt.Sprintf("Secret '%s' deleted.", params.Name))
+}

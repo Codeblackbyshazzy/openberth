@@ -35,6 +35,7 @@ func (s *MCPServer) toolDeployDir(args json.RawMessage) *ToolResult {
 		Path           string            `json:"path"`
 		Name           string            `json:"name"`
 		Env            map[string]string `json:"env"`
+		Secrets        []string          `json:"secrets"`
 		Port           string            `json:"port"`
 		Memory         string            `json:"memory"`
 		NetworkQuota   string            `json:"network_quota"`
@@ -114,7 +115,7 @@ func (s *MCPServer) toolDeployDir(args json.RawMessage) *ToolResult {
 		fields["protect_users"] = strings.Join(params.ProtectUsers, ",")
 	}
 
-	body, err := s.apiUpload("/api/deploy", tmpFile.Name(), fields, params.Env)
+	body, err := s.apiUpload("/api/deploy", tmpFile.Name(), fields, params.Env, params.Secrets)
 	if err != nil {
 		return errorResult("Upload failed: " + err.Error())
 	}
@@ -173,6 +174,7 @@ func (s *MCPServer) toolUpdateDir(args json.RawMessage) *ToolResult {
 		ID           string            `json:"id"`
 		Path         string            `json:"path"`
 		Env          map[string]string `json:"env"`
+		Secrets      []string          `json:"secrets"`
 		Port         string            `json:"port"`
 		Memory       string            `json:"memory"`
 		NetworkQuota string            `json:"network_quota"`
@@ -223,7 +225,7 @@ func (s *MCPServer) toolUpdateDir(args json.RawMessage) *ToolResult {
 		fields["network_quota"] = params.NetworkQuota
 	}
 
-	body, err := s.apiUpload("/api/deploy/"+params.ID+"/update", tmpFile.Name(), fields, params.Env)
+	body, err := s.apiUpload("/api/deploy/"+params.ID+"/update", tmpFile.Name(), fields, params.Env, params.Secrets)
 	if err != nil {
 		return errorResult("Upload failed: " + err.Error())
 	}

@@ -38,6 +38,7 @@ type CodeDeployParams struct {
 	TTL          string
 	Port         int
 	Env          map[string]string
+	Secrets      []string
 	Memory       string
 	CPUs         string
 	NetworkQuota string
@@ -54,6 +55,7 @@ type CodeUpdateParams struct {
 	Files        map[string]string
 	Port         int
 	Env          map[string]string
+	Secrets      []string
 	Memory       string
 	CPUs         string
 	NetworkQuota string
@@ -69,6 +71,7 @@ type TarballDeployParams struct {
 	TTL             string
 	Port            int
 	EnvVars         map[string]string
+	Secrets         []string
 	Memory          string
 	CPUs            string
 	NetworkQuota    string
@@ -84,6 +87,7 @@ type TarballUpdateParams struct {
 	File         io.Reader
 	Port         int
 	EnvVars      map[string]string
+	Secrets      []string
 	Memory       string
 	CPUs         string
 	NetworkQuota string
@@ -97,6 +101,7 @@ type SandboxCreateParams struct {
 	TTL          string
 	Port         int
 	Env          map[string]string
+	Secrets      []string
 	Memory       string
 	NetworkQuota string
 	Language     string // optional hint
@@ -158,6 +163,7 @@ type PromoteParams struct {
 	CPUs         string
 	NetworkQuota string
 	Env          map[string]string
+	Secrets      []string
 }
 
 // ── Build start params (internal) ───────────────────────────────────

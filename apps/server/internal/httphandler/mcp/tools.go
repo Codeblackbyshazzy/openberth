@@ -14,6 +14,7 @@ func tools() []mcpTool {
 					"title":            map[string]interface{}{"type": "string", "description": "Display title for the gallery (optional)"},
 					"description":      map[string]interface{}{"type": "string", "description": "Description shown in the gallery (optional)"},
 					"env":              map[string]interface{}{"type": "object", "description": "Environment variables as key-value pairs (optional)"},
+					"secrets":          map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed."},
 					"port":             map[string]interface{}{"type": "integer", "description": "Port the app listens on (optional, auto-detected)"},
 					"memory":           map[string]interface{}{"type": "string", "description": "Memory limit, e.g. '512m', '1g' (optional, default 512m)"},
 					"network_quota":    map[string]interface{}{"type": "string", "description": "Network transfer quota, e.g. '5g', '10g' (optional, uses server default)"},
@@ -36,6 +37,7 @@ func tools() []mcpTool {
 					"id":            map[string]interface{}{"type": "string", "description": "Deployment ID to update"},
 					"files":         map[string]interface{}{"type": "object", "description": "Map of relative file paths to file contents (replaces all files). Max 100 files, 10MB total."},
 					"env":           map[string]interface{}{"type": "object", "description": "Environment variables (optional)"},
+					"secrets":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed."},
 					"port":          map[string]interface{}{"type": "integer", "description": "Port override (optional)"},
 					"memory":        map[string]interface{}{"type": "string", "description": "Memory limit (optional)"},
 					"network_quota": map[string]interface{}{"type": "string", "description": "Network transfer quota (optional)"},
@@ -134,6 +136,7 @@ func tools() []mcpTool {
 					"files":            map[string]interface{}{"type": "object", "description": "Map of relative file paths to file contents. Max 100 files, 10MB total."},
 					"name":             map[string]interface{}{"type": "string", "description": "Subdomain name (optional, auto-generated if empty)"},
 					"env":              map[string]interface{}{"type": "object", "description": "Environment variables as key-value pairs (optional)"},
+					"secrets":          map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed."},
 					"port":             map[string]interface{}{"type": "integer", "description": "Port the dev server listens on (optional, auto-detected)"},
 					"memory":           map[string]interface{}{"type": "string", "description": "Memory limit, e.g. '512m', '1g' (optional, default 1g)"},
 					"network_quota":    map[string]interface{}{"type": "string", "description": "Network transfer quota, e.g. '5g', '10g' (optional, uses server default)"},
@@ -231,6 +234,7 @@ func tools() []mcpTool {
 					"memory":        map[string]interface{}{"type": "string", "description": "Memory limit, e.g. '512m', '1g' (optional)"},
 					"network_quota": map[string]interface{}{"type": "string", "description": "Network transfer quota, e.g. '5g', '10g' (optional)"},
 					"env":           map[string]interface{}{"type": "object", "description": "Environment variables to set (optional, merged with existing)"},
+					"secrets":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Names of stored secrets to inject as environment variables. Use berth_secret_list to see available secrets. Secret values are resolved server-side and never exposed."},
 				},
 				"required": []string{"id"},
 			},
@@ -245,6 +249,41 @@ func tools() []mcpTool {
 					"quota": map[string]interface{}{"type": "string", "description": "Network transfer quota, e.g. '1g', '5g', '10g', or '' to remove"},
 				},
 				"required": []string{"id", "quota"},
+			},
+		},
+		// ── Secret tools ─────────────────────────────────────────────
+		{
+			Name:        "berth_secret_set",
+			Description: "Store an encrypted secret for use in deployments. Add a description so the secret can be discovered later via berth_secret_list. The value is encrypted at rest and can never be read back. If the secret already exists, its value is updated and all deployments using it are automatically restarted.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name":        map[string]interface{}{"type": "string", "description": "Secret name (used as the environment variable name)"},
+					"value":       map[string]interface{}{"type": "string", "description": "Secret value (encrypted at rest, never returned)"},
+					"description": map[string]interface{}{"type": "string", "description": "Human-readable description of the secret (optional)"},
+					"global":      map[string]interface{}{"type": "boolean", "description": "If true, the secret is available to all users (admin only, optional)"},
+				},
+				"required": []string{"name", "value"},
+			},
+		},
+		{
+			Name:        "berth_secret_list",
+			Description: "List stored secrets with names and descriptions (values are never returned). Use this to discover available secrets before deploying. Pass secret names to the 'secrets' parameter of berth_deploy or berth_sandbox_create.",
+			InputSchema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "berth_secret_delete",
+			Description: "Delete a stored secret by name.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"name":   map[string]interface{}{"type": "string", "description": "Secret name to delete"},
+					"global": map[string]interface{}{"type": "boolean", "description": "If true, delete a global secret (admin only, optional)"},
+				},
+				"required": []string{"name"},
 			},
 		},
 	}

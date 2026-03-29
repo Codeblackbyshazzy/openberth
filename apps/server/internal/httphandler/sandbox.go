@@ -19,6 +19,7 @@ func (h *Handlers) SandboxCreate(w http.ResponseWriter, r *http.Request) {
 		TTL             string            `json:"ttl"`
 		Port            int               `json:"port"`
 		Env             map[string]string `json:"env"`
+		Secrets         []string          `json:"secrets"`
 		Memory          string            `json:"memory"`
 		NetworkQuota    string            `json:"network_quota"`
 		Language        string            `json:"language"`
@@ -39,6 +40,7 @@ func (h *Handlers) SandboxCreate(w http.ResponseWriter, r *http.Request) {
 		TTL:             req.TTL,
 		Port:            req.Port,
 		Env:             req.Env,
+		Secrets:         req.Secrets,
 		Memory:          req.Memory,
 		NetworkQuota:    req.NetworkQuota,
 		Language:        req.Language,
@@ -154,6 +156,7 @@ func (h *Handlers) PromoteSandbox(w http.ResponseWriter, r *http.Request) {
 		CPUs         string            `json:"cpus"`
 		NetworkQuota string            `json:"network_quota"`
 		Env          map[string]string `json:"env"`
+		Secrets      []string          `json:"secrets"`
 	}
 	// Allow empty body
 	decodeJSONBody(r, &req)
@@ -165,6 +168,7 @@ func (h *Handlers) PromoteSandbox(w http.ResponseWriter, r *http.Request) {
 		CPUs:         req.CPUs,
 		NetworkQuota: req.NetworkQuota,
 		Env:          req.Env,
+		Secrets:      req.Secrets,
 	})
 	if err != nil {
 		writeErr(w, err)

@@ -1,7 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -23,6 +26,7 @@ type Config struct {
 	Container       ContainerDefaults `json:"containerDefaults"`
 	CloudflareProxy bool              `json:"cloudflareProxy"`
 	Insecure        bool              `json:"insecure"`
+	MasterKey       string            `json:"masterKey"`
 
 	// Derived paths
 	DeploysDir     string `json:"-"`
@@ -76,5 +80,33 @@ func LoadConfig() (*Config, error) {
 		os.MkdirAll(d, 0755)
 	}
 
+	// Auto-generate master key for secrets encryption if not set
+	if cfg.MasterKey == "" {
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, fmt.Errorf("generate master key: %w", err)
+		}
+		cfg.MasterKey = hex.EncodeToString(key)
+		// Persist the generated key back to config file
+		data, err := json.MarshalIndent(cfg, "", "  ")
+		if err == nil {
+			os.WriteFile(cfgPath, data, 0600)
+		}
+	}
+
 	return cfg, nil
+}
+
+// GetMasterKeyBytes decodes the hex-encoded master key into a 32-byte array.
+func (c *Config) GetMasterKeyBytes() ([32]byte, error) {
+	var key [32]byte
+	b, err := hex.DecodeString(c.MasterKey)
+	if err != nil {
+		return key, fmt.Errorf("decode master key: %w", err)
+	}
+	if len(b) != 32 {
+		return key, fmt.Errorf("master key must be 32 bytes, got %d", len(b))
+	}
+	copy(key[:], b)
+	return key, nil
 }

@@ -44,6 +44,12 @@ func (s *MCPServer) callTool(name string, args json.RawMessage) *ToolResult {
 		return s.toolSandboxPromote(args)
 	case "berth_update_quota":
 		return s.toolUpdateQuota(args)
+	case "berth_secret_set":
+		return s.toolSecretSet(args)
+	case "berth_secret_list":
+		return s.toolSecretList()
+	case "berth_secret_delete":
+		return s.toolSecretDelete(args)
 	default:
 		return errorResult("Unknown tool: " + name)
 	}

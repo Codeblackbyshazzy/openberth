@@ -63,6 +63,7 @@ func printHelp() {
     protect [id]        Set access control (basic_auth, api_key, user, public)
     lock [id]           Lock deployment (reject updates until unlocked)
     unlock [id]         Unlock deployment (allow updates again)
+    secret              Manage secrets (set, list, delete)
     quota [id]          Set or remove network quota
     pull [id]           Download deployment source code
     destroy [id]        Remove a deployment
@@ -81,6 +82,7 @@ func printHelp() {
     --name <name>       Custom subdomain name (default: directory name)
     --ttl <duration>    Time to live: 24h, 7d, 0 for never (default: 72h)
     --env <KEY=VAL>     Environment variable (repeatable)
+    --secret <NAME>     Bind a server-side secret (repeatable)
     --memory <limit>    Memory limit (default: 512m)
     --cpus <limit>      CPU limit (default: 0.5)
     --dir <path>        Project directory (default: current)
@@ -101,6 +103,7 @@ func printHelp() {
     --name <name>       Custom subdomain name (default: directory name)
     --ttl <duration>    Time to live (default: 4h)
     --env <KEY=VAL>     Environment variable (repeatable)
+    --secret <NAME>     Bind a server-side secret (repeatable)
     --memory <limit>    Memory limit (default: 1g)
     --port <port>       Port override
     --protect <mode>    Access control: basic_auth, api_key, user
@@ -112,6 +115,11 @@ func printHelp() {
 
   %sUPDATE OPTIONS%s
     --network-quota <q> Network transfer quota (e.g. 1g, 5g, 10g)
+
+  %sSECRET COMMANDS%s
+    berth secret set NAME VALUE [--description "desc"] [--global]
+    berth secret list           List all secrets
+    berth secret delete NAME    Delete a secret [--global]
 
   %sSINGLE-FILE MODE%s
     Deploy or dev .jsx, .tsx, .vue, .svelte, .html, .md, or .ipynb files directly.
@@ -142,7 +150,7 @@ func printHelp() {
   %sSETUP%s
     berth config set server https://openberth.example.com
     berth config set key sc_your_api_key_here
-`, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset)
+`, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset)
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -185,6 +193,8 @@ func main() {
 		cmdLock(false)
 	case "quota":
 		cmdQuota()
+	case "secret":
+		cmdSecret()
 	case "backup":
 		cmdBackup()
 	case "restore":

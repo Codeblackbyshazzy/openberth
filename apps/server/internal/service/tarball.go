@@ -141,7 +141,10 @@ func (svc *Service) DeployTarball(user *store.User, p TarballDeployParams) (*Dep
 	}
 
 	ttlHours := ParseTTL(p.TTL, user.DefaultTTLHours)
-	envVars := ensureEnv(p.EnvVars)
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.EnvVars, p.Secrets)
+	if err != nil {
+		return nil, err
+	}
 	port := resolvePort(p.Port, fw.Port)
 	expiresAt := computeExpiry(ttlHours)
 	resolvedQuota := svc.ResolveNetworkQuota(p.NetworkQuota)
@@ -162,6 +165,7 @@ func (svc *Service) DeployTarball(user *store.User, p TarballDeployParams) (*Dep
 		Memory:       p.Memory,
 		CPUs:         p.CPUs,
 	})
+	svc.Store.UpdateDeploymentSecrets(id, p.Secrets)
 
 	aci, err := svc.setupAccessControl(id, codeDir, subdomain, p.ProtectMode, p.ProtectUsername, p.ProtectPassword, p.ProtectApiKey, p.ProtectUsers)
 	if err != nil {
@@ -199,6 +203,12 @@ func (svc *Service) UpdateTarball(user *store.User, p TarballUpdateParams) (*Upd
 	codeDir := filepath.Join(svc.Cfg.DeploysDir, deploy.ID)
 	if err := ExtractTarball(p.File, codeDir); err != nil {
 		return nil, ErrBadRequest("Failed to extract: " + err.Error())
+	}
+
+	// Update stored secrets if provided
+	if len(p.Secrets) > 0 {
+		svc.Store.UpdateDeploymentSecrets(deploy.ID, p.Secrets)
+		deploy.SecretsJSON = marshalSecrets(p.Secrets)
 	}
 
 	return svc.detectAndRebuild(deploy, user.Name, p.EnvVars, p.Port, p.Memory, p.CPUs, p.NetworkQuota, "update")

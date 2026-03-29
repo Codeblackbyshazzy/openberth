@@ -45,7 +45,10 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 
 	ttlHours := ParseTTL(p.TTL, 4)
 	port := resolvePort(p.Port, fw.Port)
-	envVars := ensureEnv(p.Env)
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, p.Secrets)
+	if err != nil {
+		return nil, err
+	}
 	expiresAt := computeExpiry(ttlHours)
 	resolvedQuota := svc.ResolveNetworkQuota(p.NetworkQuota)
 
@@ -63,6 +66,7 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 		NetworkQuota: resolvedQuota,
 		Memory:       p.Memory,
 	})
+	svc.Store.UpdateDeploymentSecrets(id, p.Secrets)
 
 	aci, err := svc.setupAccessControl(id, codeDir, subdomain, p.ProtectMode, p.ProtectUsername, p.ProtectPassword, p.ProtectApiKey, p.ProtectUsers)
 	if err != nil {
@@ -350,7 +354,16 @@ func (svc *Service) PromoteSandbox(user *store.User, p PromoteParams) (*DeployRe
 	expiresAt := computeExpiry(ttlHours)
 	svc.Store.UpdateDeploymentTTL(deploy.ID, ttlHours, expiresAt)
 
-	envVars := ensureEnv(p.Env)
+	// Merge secrets: start with existing sandbox secrets, override with promote params
+	secretNames := parseSecretsJSON(deploy.SecretsJSON)
+	if len(p.Secrets) > 0 {
+		secretNames = p.Secrets
+		svc.Store.UpdateDeploymentSecrets(deploy.ID, p.Secrets)
+	}
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, secretNames)
+	if err != nil {
+		return nil, err
+	}
 	resolvedQuota := svc.ResolveNetworkQuota(p.NetworkQuota)
 	svc.Store.UpdateDeploymentNetworkQuota(deploy.ID, resolvedQuota)
 

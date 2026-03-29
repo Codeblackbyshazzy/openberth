@@ -301,6 +301,22 @@ func (svc *Service) detectAndRebuild(deploy *store.Deployment, userName string, 
 		envVars[k] = v
 	}
 
+	// Resolve secrets from deployment's stored references
+	secretNames := parseSecretsJSON(deploy.SecretsJSON)
+	if len(secretNames) > 0 {
+		secretEnv, err := svc.resolveSecrets(deploy.UserID, secretNames)
+		if err != nil {
+			log.Printf("[%s] Failed to resolve secrets for %s: %v", logPrefix, deploy.ID, err)
+			// Don't fail -- proceed with env-only
+		} else {
+			// Secrets first, then explicit env overrides
+			for k, v := range envVars {
+				secretEnv[k] = v
+			}
+			envVars = secretEnv
+		}
+	}
+
 	resolvedPort := resolvePort(port, fw.Port)
 	memory = coalesce(memory, deploy.Memory)
 	cpus = coalesce(cpus, deploy.CPUs)

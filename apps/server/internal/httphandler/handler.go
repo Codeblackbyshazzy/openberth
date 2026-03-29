@@ -76,3 +76,11 @@ func parseEnvVars(r *http.Request) map[string]string {
 	}
 	return env
 }
+
+// parseSecrets extracts secret names from a multipart form.
+func parseSecrets(r *http.Request) []string {
+	if r.MultipartForm == nil {
+		return nil
+	}
+	return r.MultipartForm.Value["secrets"]
+}
