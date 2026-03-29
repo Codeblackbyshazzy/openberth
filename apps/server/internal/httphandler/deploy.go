@@ -2,6 +2,7 @@ package httphandler
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -307,6 +308,48 @@ func (h *Handlers) GetLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, 200, result)
+}
+
+// ── Stream Logs (SSE) ──────────────────────────────────────────────
+
+// StreamLogs streams deployment logs via Server-Sent Events.
+func (h *Handlers) StreamLogs(w http.ResponseWriter, r *http.Request) {
+	user := h.requireAuth(w, r)
+	if user == nil {
+		return
+	}
+
+	id := r.PathValue("id")
+	stream, err := h.svc.GetLogStream(user, id, parseTail(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	defer stream.Close()
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		jsonErr(w, 500, "Streaming not supported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx/caddy buffering
+	flusher.Flush()
+
+	scanner := bufio.NewScanner(stream)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Fprintf(w, "data: %s\n\n", line)
+		flusher.Flush()
+
+		// Check if client disconnected
+		if r.Context().Err() != nil {
+			return
+		}
+	}
 }
 
 // ── Destroy ─────────────────────────────────────────────────────────

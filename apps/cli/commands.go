@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -795,6 +796,22 @@ func cmdLogs() {
 	}
 	tail := getFlag("tail", "200")
 
+	// Check for --follow or -f flag
+	follow := hasFlag("follow")
+	if !follow {
+		for _, a := range args {
+			if a == "-f" {
+				follow = true
+				break
+			}
+		}
+	}
+
+	if follow {
+		streamLogs(id, tail)
+		return
+	}
+
 	client, err := NewAPIClient()
 	if err != nil {
 		fail(err.Error())
@@ -809,6 +826,50 @@ func cmdLogs() {
 
 	if logs, ok := result["logs"].(string); ok {
 		fmt.Print(logs)
+	}
+}
+
+func streamLogs(id, tail string) {
+	client, err := NewAPIClient()
+	if err != nil {
+		fail(err.Error())
+		os.Exit(1)
+	}
+
+	url := fmt.Sprintf("%s/api/deployments/%s/logs/stream?tail=%s", client.server, id, tail)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fail(err.Error())
+		os.Exit(1)
+	}
+	req.Header.Set("Authorization", "Bearer "+client.key)
+
+	resp, err := client.http.Do(req)
+	if err != nil {
+		fail("Connection failed: " + err.Error())
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		fail(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		os.Exit(1)
+	}
+
+	// Read SSE stream — lines are "data: <content>\n\n"
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			fmt.Println(line[6:]) // strip "data: " prefix
+		}
+		// Skip empty lines (SSE separators)
+	}
+
+	if err := scanner.Err(); err != nil {
+		// Connection closed — normal when container stops
+		return
 	}
 }
 

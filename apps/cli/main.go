@@ -117,6 +117,10 @@ func printHelp() {
   %sUPDATE OPTIONS%s
     --network-quota <q> Network transfer quota (e.g. 1g, 5g, 10g)
 
+  %sLOGS OPTIONS%s
+    --tail <n>          Number of lines to show (default: 200)
+    --follow, -f        Stream logs in real time (SSE)
+
   %sSECRET COMMANDS%s
     berth secret set NAME VALUE [--description "desc"] [--global]
     berth secret list           List all secrets
@@ -147,11 +151,13 @@ func printHelp() {
     berth quota abc123 --remove         Remove network quota
     berth update abc123def
     berth logs abc123def --tail 50
+    berth logs --follow              Stream logs in real time
+    berth logs abc123def -f          Stream logs (short flag)
 
   %sSETUP%s
     berth config set server https://openberth.example.com
     berth config set key sc_your_api_key_here
-`, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset)
+`, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset, cBold, cReset)
 }
 
 // ── Main ────────────────────────────────────────────────────────────

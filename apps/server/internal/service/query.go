@@ -1,6 +1,7 @@
 package service
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,21 @@ func (svc *Service) GetLogs(user *store.User, id string, tail int) (*LogsResult,
 		ID:   deploy.ID,
 		Logs: svc.Container.Logs(deploy.ID, tail),
 	}, nil
+}
+
+// ── Get Log Stream ─────────────────────────────────────────────────
+
+// GetLogStream returns a streaming reader for deployment logs.
+// The caller must close the reader when done.
+func (svc *Service) GetLogStream(user *store.User, id string, tail int) (io.ReadCloser, error) {
+	deploy, _ := svc.Store.GetDeployment(id)
+	if deploy == nil {
+		return nil, ErrNotFound("Not found.")
+	}
+	if deploy.UserID != user.ID && user.Role != "admin" {
+		return nil, ErrForbidden("Not your deployment.")
+	}
+	return svc.Container.LogStream(deploy.ID, tail)
 }
 
 // ── List Deployments ────────────────────────────────────────────────

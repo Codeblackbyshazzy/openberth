@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -653,6 +654,34 @@ func (cm *ContainerManager) Logs(deployID string, tail int) string {
 		return fmt.Sprintf("Error fetching logs: %v", err)
 	}
 	return out
+}
+
+// LogStream starts a streaming docker logs process and returns an io.ReadCloser.
+// The caller must close the reader when done, which kills the process.
+func (cm *ContainerManager) LogStream(deployID string, tail int) (io.ReadCloser, error) {
+	name := "sc-" + deployID
+	cmd := exec.Command("docker", "logs", "--follow", "--tail", fmt.Sprintf("%d", tail), name)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = cmd.Stdout // merge stderr into stdout
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	// Return a wrapper that kills the process when closed
+	return &streamReader{ReadCloser: stdout, cmd: cmd}, nil
+}
+
+type streamReader struct {
+	io.ReadCloser
+	cmd *exec.Cmd
+}
+
+func (s *streamReader) Close() error {
+	s.cmd.Process.Kill()
+	s.cmd.Wait()
+	return s.ReadCloser.Close()
 }
 
 func (cm *ContainerManager) Status(deployID string) string {

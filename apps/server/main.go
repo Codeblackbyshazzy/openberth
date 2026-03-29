@@ -101,6 +101,7 @@ func main() {
 	mux.HandleFunc("PATCH /api/deployments/{id}", h.UpdateMeta)
 	mux.HandleFunc("DELETE /api/deployments/{id}", h.DestroyDeployment)
 	mux.HandleFunc("GET /api/deployments/{id}/logs", h.GetLogs)
+	mux.HandleFunc("GET /api/deployments/{id}/logs/stream", h.StreamLogs)
 	mux.HandleFunc("GET /api/deployments/{id}/source", h.GetSource)
 	mux.HandleFunc("POST /api/deployments/{id}/protect", h.ProtectDeployment)
 	mux.HandleFunc("POST /api/deployments/{id}/lock", h.LockDeployment)
