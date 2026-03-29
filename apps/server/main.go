@@ -31,6 +31,11 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		selfUpdate(os.Args[2:])
+		return
+	}
+
 	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {

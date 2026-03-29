@@ -72,6 +72,7 @@ func printHelp() {
     restore <file>      Restore server from backup file (admin)
     login               Login via browser (sets up API key automatically)
     config              Manage CLI configuration
+    upgrade             Upgrade the CLI to the latest version
     version             Show CLI and server version
 
   %sINIT OPTIONS%s
@@ -203,6 +204,8 @@ func main() {
 		cmdLogin()
 	case "config":
 		cmdConfig()
+	case "upgrade":
+		cmdUpdateCLI()
 	case "version", "--version", "-v":
 		cmdVersion()
 	case "help", "--help", "-h":
