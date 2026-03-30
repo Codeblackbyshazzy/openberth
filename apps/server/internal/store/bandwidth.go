@@ -54,3 +54,9 @@ func (s *Store) DeleteBandwidthBefore(date string) error {
 	_, err := s.db.Exec("DELETE FROM bandwidth_usage WHERE period_start < ?", date)
 	return err
 }
+
+// DeleteBandwidthForDeployment removes all bandwidth records for a deployment.
+func (s *Store) DeleteBandwidthForDeployment(deployID string) error {
+	_, err := s.db.Exec("DELETE FROM bandwidth_usage WHERE deployment_id = ?", deployID)
+	return err
+}

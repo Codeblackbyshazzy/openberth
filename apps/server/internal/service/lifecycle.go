@@ -16,6 +16,7 @@ func (svc *Service) DestroyFull(d *store.Deployment) {
 	svc.Container.Destroy(d.ID)
 	svc.Proxy.RemoveRoute(d.Subdomain)
 	svc.DataStore.DeleteDB(d.ID)
+	svc.Store.DeleteBandwidthForDeployment(d.ID)
 	os.RemoveAll(filepath.Join(svc.Cfg.DeploysDir, d.ID))
 	os.RemoveAll(filepath.Join(svc.Cfg.PersistDir, d.ID))
 	svc.Store.DeleteDeployment(d.ID)
