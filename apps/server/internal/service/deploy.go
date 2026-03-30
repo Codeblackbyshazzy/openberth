@@ -80,7 +80,15 @@ func (svc *Service) DeployCode(user *store.User, p CodeDeployParams) (*DeployRes
 
 	ttlHours := ParseTTL(p.TTL, user.DefaultTTLHours)
 	port := resolvePort(p.Port, fw.Port)
-	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, p.Secrets)
+	userEnv := ensureEnv(p.Env)
+	// Validate secrets exist (but don't store resolved values)
+	if len(p.Secrets) > 0 {
+		if _, err := svc.resolveSecrets(user.ID, p.Secrets); err != nil {
+			return nil, err
+		}
+	}
+	// Resolve secrets JIT for container env
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, userEnv, p.Secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +105,7 @@ func (svc *Service) DeployCode(user *store.User, p CodeDeployParams) (*DeployRes
 		Framework:    fw.Framework,
 		Status:       "building",
 		TTLHours:     ttlHours,
-		EnvJSON:      marshalEnv(envVars),
+		EnvJSON:      marshalEnv(userEnv),
 		ExpiresAt:    expiresAt,
 		NetworkQuota: resolvedQuota,
 		Memory:       p.Memory,

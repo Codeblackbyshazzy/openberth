@@ -141,7 +141,8 @@ func (svc *Service) DeployTarball(user *store.User, p TarballDeployParams) (*Dep
 	}
 
 	ttlHours := ParseTTL(p.TTL, user.DefaultTTLHours)
-	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.EnvVars, p.Secrets)
+	userEnv := ensureEnv(p.EnvVars)
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, userEnv, p.Secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (svc *Service) DeployTarball(user *store.User, p TarballDeployParams) (*Dep
 		Framework:    fw.Framework,
 		Status:       "building",
 		TTLHours:     ttlHours,
-		EnvJSON:      marshalEnv(envVars),
+		EnvJSON:      marshalEnv(userEnv),
 		ExpiresAt:    expiresAt,
 		NetworkQuota: resolvedQuota,
 		Memory:       p.Memory,

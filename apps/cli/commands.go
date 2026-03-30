@@ -1546,12 +1546,9 @@ func cmdSecretList() {
 			continue
 		}
 		sName, _ := sec["name"].(string)
-		scope := "project"
-		if g, _ := sec["global"].(bool); g {
-			scope = "global"
-		}
+		scope, _ := sec["scope"].(string)
 		desc, _ := sec["description"].(string)
-		updated, _ := sec["updated"].(string)
+		updated, _ := sec["updatedAt"].(string)
 
 		fmt.Printf("  %-20s %-10s %-30s %s\n", sName, scope, desc, updated)
 	}

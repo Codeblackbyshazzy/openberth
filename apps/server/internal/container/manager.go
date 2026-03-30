@@ -186,6 +186,39 @@ func (cm *ContainerManager) Rebuild(opts CreateOpts) (*ContainerResult, error) {
 	return result, nil
 }
 
+// RecreateRuntime stops the current runtime and starts a new one with the same
+// build volume but potentially different env vars. Skips the build phase entirely.
+// Used for secret rotation where code hasn't changed.
+func (cm *ContainerManager) RecreateRuntime(opts CreateOpts) (*ContainerResult, error) {
+	p := framework.GetProvider(opts.Language)
+	if p != nil && p.StaticOnly() {
+		return cm.rebuildStatic(opts)
+	}
+
+	runnerName := "sc-" + opts.ID
+
+	volume := cm.currentVolume(opts.ID)
+	if volume == "" {
+		return nil, fmt.Errorf("cannot find current volume for %s", opts.ID)
+	}
+
+	hostPort := cm.InspectPort(opts.ID)
+	if hostPort == 0 {
+		return nil, fmt.Errorf("cannot determine port for %s", opts.ID)
+	}
+
+	log.Printf("[restart] Restarting runtime for %s (port %d, same volume %s)", opts.ID, hostPort, volume)
+	execCmd("docker", "rm", "-f", runnerName)
+
+	result, err := cm.startRuntime(opts, volume, hostPort)
+	if err != nil {
+		return nil, fmt.Errorf("restart failed: %w", err)
+	}
+
+	log.Printf("[restart] Runtime restarted for %s", opts.ID)
+	return result, nil
+}
+
 // -- Internal helpers --
 
 func (cm *ContainerManager) runBuild(opts CreateOpts, volumeName string, oldVolume string) error {

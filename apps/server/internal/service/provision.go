@@ -292,29 +292,36 @@ func (svc *Service) detectAndRebuild(deploy *store.Deployment, userName string, 
 		return nil, ErrBadRequest("Could not detect framework in updated code. Add a .berth.json with \"language\" and \"start\" fields.")
 	}
 
-	// Merge env: start with existing, override with any new values
-	envVars := map[string]string{}
+	// Merge explicit env: start with existing user-supplied env, override with any new values
+	userEnv := map[string]string{}
 	if deploy.EnvJSON != "" && deploy.EnvJSON != "{}" {
-		json.Unmarshal([]byte(deploy.EnvJSON), &envVars)
+		json.Unmarshal([]byte(deploy.EnvJSON), &userEnv)
 	}
 	for k, v := range env {
-		envVars[k] = v
+		userEnv[k] = v
 	}
 
-	// Resolve secrets from deployment's stored references
+	// Persist only user-supplied env (not resolved secrets) so secrets are always resolved fresh
+	if b, err := json.Marshal(userEnv); err == nil {
+		svc.Store.UpdateDeploymentEnvJSON(deploy.ID, string(b))
+	}
+
+	// Resolve secrets from deployment's stored references and merge
+	// Secrets go in first, then explicit env overrides same-named secrets
+	envVars := map[string]string{}
 	secretNames := parseSecretsJSON(deploy.SecretsJSON)
 	if len(secretNames) > 0 {
 		secretEnv, err := svc.resolveSecrets(deploy.UserID, secretNames)
 		if err != nil {
 			log.Printf("[%s] Failed to resolve secrets for %s: %v", logPrefix, deploy.ID, err)
-			// Don't fail -- proceed with env-only
 		} else {
-			// Secrets first, then explicit env overrides
-			for k, v := range envVars {
-				secretEnv[k] = v
+			for k, v := range secretEnv {
+				envVars[k] = v
 			}
-			envVars = secretEnv
 		}
+	}
+	for k, v := range userEnv {
+		envVars[k] = v
 	}
 
 	resolvedPort := resolvePort(port, fw.Port)
@@ -323,10 +330,6 @@ func (svc *Service) detectAndRebuild(deploy *store.Deployment, userName string, 
 	quota := deploy.NetworkQuota
 	if networkQuota != "" {
 		quota = networkQuota
-	}
-
-	if b, err := json.Marshal(envVars); err == nil {
-		svc.Store.UpdateDeploymentEnvJSON(deploy.ID, string(b))
 	}
 	svc.Store.UpdateDeploymentStatus(deploy.ID, "updating")
 

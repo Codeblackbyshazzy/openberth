@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 
+	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/secret"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
@@ -42,14 +45,24 @@ func (svc *Service) SecretSet(user *store.User, name, value, description string,
 		return nil, ErrInternal("Failed to encrypt secret: " + err.Error())
 	}
 
-	// Check if this is an update (for auto-restart)
 	var userID *string
 	if !global {
 		userID = &user.ID
 	}
 
+	// Check if secret exists — and if so, ensure scope matches
 	existing, _ := svc.Store.GetSecret(user.ID, name)
 	isUpdate := existing != nil
+
+	if isUpdate {
+		existingIsGlobal := existing.UserID == nil
+		if existingIsGlobal != global {
+			if existingIsGlobal {
+				return nil, ErrBadRequest(fmt.Sprintf("Secret %q already exists as a global secret. Use --global to update it.", name))
+			}
+			return nil, ErrBadRequest(fmt.Sprintf("Secret %q already exists as a user secret. Remove --global to update it.", name))
+		}
+	}
 
 	if err := svc.Store.SetSecret(userID, scopeStr(global), name, description, encDEK, dekNonce, ciphertext, valNonce); err != nil {
 		return nil, ErrInternal("Failed to store secret: " + err.Error())
@@ -75,7 +88,9 @@ func scopeStr(global bool) string {
 	return "user"
 }
 
-// restartDeploymentsUsingSecret finds and restarts all deployments referencing a secret.
+// restartDeploymentsUsingSecret finds and recreates runtime containers for all
+// deployments referencing a secret. Skips the build phase — only the runtime
+// container is replaced with the new env vars.
 func (svc *Service) restartDeploymentsUsingSecret(secretName, userName string) []string {
 	deploys, err := svc.Store.GetDeploymentsUsingSecret(secretName)
 	if err != nil || len(deploys) == 0 {
@@ -87,11 +102,81 @@ func (svc *Service) restartDeploymentsUsingSecret(secretName, userName string) [
 		if d.Status != "running" {
 			continue
 		}
-		deploy := d // copy for closure
-		svc.detectAndRebuild(&deploy, userName, nil, 0, "", "", "", "secret-rotate")
+		deploy := d
+		go svc.recreateForSecretRotation(&deploy, userName)
 		restarted = append(restarted, d.Name)
 	}
 	return restarted
+}
+
+// recreateForSecretRotation resolves secrets and recreates the runtime container
+// without a full rebuild. Much faster than detectAndRebuild (~5s vs 30-60s).
+func (svc *Service) recreateForSecretRotation(deploy *store.Deployment, userName string) {
+	codeDir := filepath.Join(svc.Cfg.DeploysDir, deploy.ID)
+
+	fw := framework.DetectWithOverrides(codeDir)
+	if fw == nil {
+		log.Printf("[secret-rotate] Cannot detect framework for %s, skipping", deploy.ID)
+		return
+	}
+
+	// Load user-supplied env
+	userEnv := map[string]string{}
+	if deploy.EnvJSON != "" && deploy.EnvJSON != "{}" {
+		json.Unmarshal([]byte(deploy.EnvJSON), &userEnv)
+	}
+
+	// Resolve secrets fresh
+	envVars := map[string]string{}
+	secretNames := parseSecretsJSON(deploy.SecretsJSON)
+	if len(secretNames) > 0 {
+		secretEnv, err := svc.resolveSecrets(deploy.UserID, secretNames)
+		if err != nil {
+			log.Printf("[secret-rotate] Failed to resolve secrets for %s: %v", deploy.ID, err)
+			return
+		}
+		for k, v := range secretEnv {
+			envVars[k] = v
+		}
+	}
+	for k, v := range userEnv {
+		envVars[k] = v
+	}
+
+	port := resolvePort(0, fw.Port)
+	memory := deploy.Memory
+	if memory == "" {
+		memory = svc.Cfg.Container.Memory
+	}
+	cpus := deploy.CPUs
+	if cpus == "" {
+		cpus = svc.Cfg.Container.CPUs
+	}
+
+	result, err := svc.Container.RecreateRuntime(container.CreateOpts{
+		ID:           deploy.ID,
+		UserID:       deploy.UserID,
+		CodeDir:      codeDir,
+		Framework:    fw.Framework,
+		Language:     fw.Language,
+		Port:         port,
+		Image:        fw.Image,
+		RunImage:     fw.RunImage,
+		StartCmd:     fw.StartCmd,
+		FrameworkEnv: fw.Env,
+		UserEnv:      envVars,
+		Memory:       memory,
+		CPUs:         cpus,
+		NetworkQuota: deploy.NetworkQuota,
+	})
+	if err != nil {
+		log.Printf("[secret-rotate] Restart failed for %s: %v", deploy.ID, err)
+		svc.Store.UpdateDeploymentStatus(deploy.ID, "failed")
+		return
+	}
+	svc.Store.UpdateDeploymentRunning(deploy.ID, result.ContainerID, result.HostPort)
+	svc.Proxy.AddRoute(deploy.Subdomain, result.HostPort, AccessControlFromDeployment(deploy))
+	log.Printf("[secret-rotate] %s restarted | user=%s", deploy.Subdomain, userName)
 }
 
 // SecretDelete removes a secret.

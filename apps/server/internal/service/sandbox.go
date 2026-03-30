@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -45,7 +46,8 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 
 	ttlHours := ParseTTL(p.TTL, 4)
 	port := resolvePort(p.Port, fw.Port)
-	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, p.Secrets)
+	userEnv := ensureEnv(p.Env)
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, userEnv, p.Secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +62,7 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 		Framework:    fw.Framework,
 		Status:       "building",
 		TTLHours:     ttlHours,
-		EnvJSON:      marshalEnv(envVars),
+		EnvJSON:      marshalEnv(userEnv),
 		ExpiresAt:    expiresAt,
 		Mode:         "sandbox",
 		NetworkQuota: resolvedQuota,
@@ -360,7 +362,17 @@ func (svc *Service) PromoteSandbox(user *store.User, p PromoteParams) (*DeployRe
 		secretNames = p.Secrets
 		svc.Store.UpdateDeploymentSecrets(deploy.ID, p.Secrets)
 	}
-	envVars, err := svc.mergeEnvAndSecrets(user.ID, p.Env, secretNames)
+	// Store only user-supplied env (merge existing + new)
+	userEnv := map[string]string{}
+	if deploy.EnvJSON != "" && deploy.EnvJSON != "{}" {
+		json.Unmarshal([]byte(deploy.EnvJSON), &userEnv)
+	}
+	for k, v := range ensureEnv(p.Env) {
+		userEnv[k] = v
+	}
+	svc.Store.UpdateDeploymentEnvJSON(deploy.ID, marshalEnv(userEnv))
+	// Resolve secrets JIT for container
+	envVars, err := svc.mergeEnvAndSecrets(user.ID, userEnv, secretNames)
 	if err != nil {
 		return nil, err
 	}

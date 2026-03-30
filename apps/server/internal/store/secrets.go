@@ -92,9 +92,16 @@ func (s *Store) DeleteSecret(userID *string, name string) error {
 // ListSecrets returns metadata for a user's secrets plus all global secrets.
 func (s *Store) ListSecrets(userID string) ([]SecretMeta, error) {
 	rows, err := s.db.Query(`
-		SELECT name, scope, COALESCE(description,''), created_at, updated_at
-		FROM secrets
-		WHERE user_id = ? OR user_id IS NULL
+		SELECT name, scope, COALESCE(description,''), created_at, COALESCE(updated_at, created_at)
+		FROM (
+			SELECT *, ROW_NUMBER() OVER (
+				PARTITION BY name
+				ORDER BY CASE WHEN user_id IS NOT NULL THEN 0 ELSE 1 END
+			) AS rn
+			FROM secrets
+			WHERE user_id = ? OR user_id IS NULL
+		)
+		WHERE rn = 1
 		ORDER BY scope, name`,
 		userID,
 	)
@@ -152,10 +159,9 @@ func (s *Store) GetSecretsByNames(userID string, names []string) ([]Secret, erro
 	var secrets []Secret
 	for rows.Next() {
 		var sec Secret
-		var rn int
 		if err := rows.Scan(&sec.ID, &sec.UserID, &sec.Scope, &sec.Name, &sec.Description,
 			&sec.EncryptedDEK, &sec.DEKNonce, &sec.Ciphertext, &sec.ValueNonce,
-			&sec.CreatedAt, &sec.UpdatedAt, &rn); err != nil {
+			&sec.CreatedAt, &sec.UpdatedAt); err != nil {
 			return nil, err
 		}
 		secrets = append(secrets, sec)
