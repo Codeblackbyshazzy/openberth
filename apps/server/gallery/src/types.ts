@@ -26,4 +26,5 @@ export interface GalleryResponse {
   userRole?: string;
   userName?: string;
   hasPassword?: boolean;
+  serverVersion?: string;
 }

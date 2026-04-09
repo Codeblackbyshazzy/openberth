@@ -170,6 +170,7 @@ func (h *Handlers) Gallery(w http.ResponseWriter, r *http.Request) {
 		resp["userName"] = user.Name
 	}
 	resp["hasPassword"] = user.PasswordHash != ""
+	resp["serverVersion"] = h.version
 	jsonResp(w, 200, resp)
 }
 
