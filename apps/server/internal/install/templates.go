@@ -23,7 +23,12 @@ const caddyfileTemplate = `{
 }
 
 %s {
-    reverse_proxy localhost:3456
+    handle /internal/* {
+        respond "Not Found" 404
+    }
+    handle {
+        reverse_proxy localhost:3456
+    }
 }
 
 import /etc/caddy/sites/*.caddy`
@@ -48,7 +53,12 @@ const caddyfileCloudflareTemplate = `{
 
 %s {
     tls internal
-    reverse_proxy localhost:3456
+    handle /internal/* {
+        respond "Not Found" 404
+    }
+    handle {
+        reverse_proxy localhost:3456
+    }
 }
 
 import /etc/caddy/sites/*.caddy`
@@ -73,7 +83,12 @@ const caddyfileInsecureTemplate = `{
 }
 
 http://%s {
-    reverse_proxy localhost:3456
+    handle /internal/* {
+        respond "Not Found" 404
+    }
+    handle {
+        reverse_proxy localhost:3456
+    }
 }
 
 import /etc/caddy/sites/*.caddy`

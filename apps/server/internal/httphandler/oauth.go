@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -107,6 +108,68 @@ func (o *OAuthHandlers) Authorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// validateAuthorizeParams validates the client_id / redirect_uri / code_challenge
+// triple and returns the resolved OAuth client. On failure it writes an error
+// response and returns nil.
+func (o *OAuthHandlers) validateAuthorizeParams(w http.ResponseWriter, clientID, redirectURI, codeChallenge, codeChallengeMethod string) *store.OAuthClient {
+	if clientID == "" || redirectURI == "" || codeChallenge == "" {
+		jsonErr(w, 400, "Missing required parameters: client_id, redirect_uri, code_challenge")
+		return nil
+	}
+	if codeChallengeMethod != "" && codeChallengeMethod != "S256" {
+		jsonErr(w, 400, "code_challenge_method must be S256")
+		return nil
+	}
+	client, _ := o.store.GetOAuthClient(clientID)
+	if client == nil {
+		jsonErr(w, 400, "Unknown client_id")
+		return nil
+	}
+	if !containsString(client.RedirectURIs, redirectURI) {
+		jsonErr(w, 400, "redirect_uri not registered for this client")
+		return nil
+	}
+	return client
+}
+
+// issueAuthCode mints an authorization code for the given user and redirects
+// to the client's redirect_uri with ?code=... (and ?state=... if provided).
+func (o *OAuthHandlers) issueAuthCode(w http.ResponseWriter, r *http.Request, userID, clientID, redirectURI, state, codeChallenge string) {
+	code := "oauthcode_" + service.RandomHex(24)
+	oauthCode := &store.OAuthCode{
+		Code:          code,
+		ClientID:      clientID,
+		UserID:        userID,
+		RedirectURI:   redirectURI,
+		CodeChallenge: codeChallenge,
+	}
+	if err := o.store.CreateOAuthCode(oauthCode); err != nil {
+		jsonErr(w, 500, "Internal error")
+		return
+	}
+	redirectURL, _ := url.Parse(redirectURI)
+	q := redirectURL.Query()
+	q.Set("code", code)
+	if state != "" {
+		q.Set("state", state)
+	}
+	redirectURL.RawQuery = q.Encode()
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+}
+
+// denyAuthRequest redirects back to the client's redirect_uri with an
+// access_denied error per RFC 6749 §4.1.2.1.
+func denyAuthRequest(w http.ResponseWriter, r *http.Request, redirectURI, state string) {
+	redirectURL, _ := url.Parse(redirectURI)
+	q := redirectURL.Query()
+	q.Set("error", "access_denied")
+	if state != "" {
+		q.Set("state", state)
+	}
+	redirectURL.RawQuery = q.Encode()
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+}
+
 func (o *OAuthHandlers) authorizeGet(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	clientID := q.Get("client_id")
@@ -115,73 +178,75 @@ func (o *OAuthHandlers) authorizeGet(w http.ResponseWriter, r *http.Request) {
 	codeChallenge := q.Get("code_challenge")
 	codeChallengeMethod := q.Get("code_challenge_method")
 
-	if clientID == "" || redirectURI == "" || codeChallenge == "" {
-		jsonErr(w, 400, "Missing required parameters: client_id, redirect_uri, code_challenge")
-		return
+	if codeChallengeMethod == "" {
+		codeChallengeMethod = "S256"
 	}
-	if codeChallengeMethod != "S256" {
-		jsonErr(w, 400, "code_challenge_method must be S256")
-		return
-	}
-
-	client, _ := o.store.GetOAuthClient(clientID)
+	client := o.validateAuthorizeParams(w, clientID, redirectURI, codeChallenge, codeChallengeMethod)
 	if client == nil {
-		jsonErr(w, 400, "Unknown client_id")
 		return
 	}
 
-	if !containsString(client.RedirectURIs, redirectURI) {
-		jsonErr(w, 400, "redirect_uri not registered for this client")
-		return
-	}
-
-	// If user has a valid session, auto-approve (no API key paste needed)
+	// Require a logged-in session. Never issue a code on GET — that is the
+	// silent-grant vulnerability. The user must confirm via POST below.
+	var user *store.User
 	if o.auth != nil {
-		if user := o.auth(r); user != nil {
-			code := "oauthcode_" + service.RandomHex(24)
-			oauthCode := &store.OAuthCode{
-				Code:          code,
-				ClientID:      clientID,
-				UserID:        user.ID,
-				RedirectURI:   redirectURI,
-				CodeChallenge: codeChallenge,
-			}
-			if err := o.store.CreateOAuthCode(oauthCode); err != nil {
-				jsonErr(w, 500, "Internal error")
-				return
-			}
-			redirectURL, _ := url.Parse(redirectURI)
-			rq := redirectURL.Query()
-			rq.Set("code", code)
-			if state != "" {
-				rq.Set("state", state)
-			}
-			redirectURL.RawQuery = rq.Encode()
-			http.Redirect(w, r, redirectURL.String(), http.StatusFound)
-			return
-		}
+		user = o.auth(r)
+	}
+	if user == nil {
+		loginURL := fmt.Sprintf("/login?redirect=%s", url.QueryEscape(r.URL.String()))
+		http.Redirect(w, r, loginURL, http.StatusFound)
+		return
 	}
 
-	// No session -- redirect to login page, which will return here after login
-	loginURL := fmt.Sprintf("/login?redirect=%s", url.QueryEscape(r.URL.String()))
-	http.Redirect(w, r, loginURL, http.StatusFound)
+	renderConsentPage(w, client, redirectURI, clientID, state, codeChallenge, user)
 }
 
 func (o *OAuthHandlers) authorizePost(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	action := r.FormValue("action")
 	apiKey := strings.TrimSpace(r.FormValue("api_key"))
 	clientID := r.FormValue("client_id")
 	redirectURI := r.FormValue("redirect_uri")
 	state := r.FormValue("state")
 	codeChallenge := r.FormValue("code_challenge")
 
+	// Session-based consent flow (Allow/Deny from consent page).
+	// SameSite=Lax on the session cookie prevents cross-origin POSTs from
+	// carrying the cookie, so reaching this branch requires the POST to come
+	// from the OpenBerth origin — i.e. the consent page the user saw.
+	if action != "" {
+		if o.validateAuthorizeParams(w, clientID, redirectURI, codeChallenge, "S256") == nil {
+			return
+		}
+		var user *store.User
+		if o.auth != nil {
+			user = o.auth(r)
+		}
+		if user == nil {
+			jsonErr(w, 401, "Session expired. Please log in again.")
+			return
+		}
+		switch action {
+		case "allow":
+			o.issueAuthCode(w, r, user.ID, clientID, redirectURI, state, codeChallenge)
+		case "deny":
+			denyAuthRequest(w, r, redirectURI, state)
+		default:
+			jsonErr(w, 400, "Invalid action.")
+		}
+		return
+	}
+
+	// Legacy: user pastes their API key into the consent form (no session).
 	if apiKey == "" || clientID == "" || redirectURI == "" || codeChallenge == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(400)
 		fmt.Fprint(w, `<html><body><h2>Missing fields</h2><p>Please go back and fill in all fields.</p></body></html>`)
 		return
 	}
-
+	if o.validateAuthorizeParams(w, clientID, redirectURI, codeChallenge, "S256") == nil {
+		return
+	}
 	user, err := o.store.GetUserByKey(apiKey)
 	if err != nil || user == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -189,30 +254,81 @@ func (o *OAuthHandlers) authorizePost(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<html><body><h2>Invalid API Key</h2><p>The API key you entered is not valid. Please try again.</p><p><a href="javascript:history.back()">Go back</a></p></body></html>`)
 		return
 	}
-
-	code := "oauthcode_" + service.RandomHex(24)
-	oauthCode := &store.OAuthCode{
-		Code:          code,
-		ClientID:      clientID,
-		UserID:        user.ID,
-		RedirectURI:   redirectURI,
-		CodeChallenge: codeChallenge,
-	}
-	if err := o.store.CreateOAuthCode(oauthCode); err != nil {
-		jsonErr(w, 500, "Internal error")
-		return
-	}
-
-	redirectURL, _ := url.Parse(redirectURI)
-	q := redirectURL.Query()
-	q.Set("code", code)
-	if state != "" {
-		q.Set("state", state)
-	}
-	redirectURL.RawQuery = q.Encode()
-
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+	o.issueAuthCode(w, r, user.ID, clientID, redirectURI, state, codeChallenge)
 }
+
+// renderConsentPage shows an HTML approval page with Allow/Deny buttons.
+// The form POSTs back to /oauth/authorize. Everything user-influenced is
+// HTML-escaped; the redirect URI is shown prominently because it is the
+// most security-relevant field the user must inspect.
+func renderConsentPage(w http.ResponseWriter, client *store.OAuthClient, redirectURI, clientID, state, codeChallenge string, user *store.User) {
+	clientName := client.ClientName
+	if strings.TrimSpace(clientName) == "" {
+		clientName = "(unnamed client)"
+	}
+	userLabel := user.DisplayName
+	if userLabel == "" {
+		userLabel = user.Name
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	fmt.Fprintf(w, consentPageHTML,
+		html.EscapeString(clientName),
+		html.EscapeString(userLabel),
+		html.EscapeString(redirectURI),
+		html.EscapeString(clientID),
+		html.EscapeString(redirectURI),
+		html.EscapeString(state),
+		html.EscapeString(codeChallenge),
+	)
+}
+
+const consentPageHTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenBerth - Authorize</title>
+<style>` + pageStyles + `
+  .consent-row { font-size: 0.875rem; margin-bottom: 0.75rem; }
+  .consent-row .k { color: var(--muted-fg); display: block; margin-bottom: 0.25rem; }
+  .consent-row .v { word-break: break-all; }
+  .redirect-uri { background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem 0.625rem; font-size: 0.8125rem; }
+  .btn-row { display: flex; gap: 0.5rem; margin-top: 1.5rem; }
+  .btn-row .btn, .btn-row .btn-outline { margin-top: 0; }
+  .warn-note { font-size: 0.75rem; color: var(--muted-fg); margin-top: 0.75rem; line-height: 1.4; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Authorize access</h1>
+    <p class="subtitle"><strong>%s</strong> is requesting access to your OpenBerth account.</p>
+
+    <div class="consent-row">
+      <span class="k">Signed in as</span>
+      <span class="v">%s</span>
+    </div>
+
+    <div class="consent-row">
+      <span class="k">Will redirect to</span>
+      <div class="redirect-uri">%s</div>
+    </div>
+
+    <p class="warn-note">If you do not recognise this application or redirect URL, click Deny. Approving grants full API access equivalent to your own account.</p>
+
+    <form method="POST" action="/oauth/authorize">
+      <input type="hidden" name="client_id" value="%s">
+      <input type="hidden" name="redirect_uri" value="%s">
+      <input type="hidden" name="state" value="%s">
+      <input type="hidden" name="code_challenge" value="%s">
+      <div class="btn-row">
+        <button class="btn-outline" type="submit" name="action" value="deny">Deny</button>
+        <button class="btn" type="submit" name="action" value="allow">Allow</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>`
 
 // ── Token Endpoint ────────────────────────────────────────────────
 
