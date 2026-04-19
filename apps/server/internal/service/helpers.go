@@ -55,6 +55,11 @@ func RandomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
+// NewAPIKey returns a fresh user API key in the canonical "sc_<48 hex>" format.
+func NewAPIKey() string {
+	return "sc_" + RandomHex(24)
+}
+
 // ParseSize converts a human-readable size string (e.g. "5g", "500m") to bytes.
 func ParseSize(s string) (int64, error) {
 	s = strings.TrimSpace(strings.ToLower(s))

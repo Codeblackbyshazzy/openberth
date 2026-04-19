@@ -33,6 +33,7 @@ export function SettingsView({ apiKey }: SettingsViewProps) {
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editUserTarget, setEditUserTarget] = useState<UserInfo | null>(null);
   const [createdUserResult, setCreatedUserResult] = useState<{ name: string; key: string } | null>(null);
+  const [rotatedKeyResult, setRotatedKeyResult] = useState<{ name: string; key: string } | null>(null);
 
   const fetchAdminData = useCallback(() => {
     const headers = authHeaders(apiKey);
@@ -137,6 +138,18 @@ export function SettingsView({ apiKey }: SettingsViewProps) {
       });
     }
     fetchAdminData();
+  };
+
+  const handleRotateUserKey = async (name: string) => {
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(name)}/rotate-key`, {
+      method: "POST",
+      headers: authHeaders(apiKey),
+      credentials: "same-origin",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setRotatedKeyResult({ name: data.name, key: data.apiKey });
+    }
   };
 
   const selectClass = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
@@ -298,8 +311,9 @@ export function SettingsView({ apiKey }: SettingsViewProps) {
       </Tabs>
 
       <CreateUserDialog open={showCreateUser} onClose={() => setShowCreateUser(false)} onCreate={handleCreateUser} />
-      <EditUserDialog target={editUserTarget} onClose={() => setEditUserTarget(null)} onSave={handleSaveUser} />
+      <EditUserDialog target={editUserTarget} onClose={() => setEditUserTarget(null)} onSave={handleSaveUser} onRotateKey={handleRotateUserKey} />
       <ApiKeyDialog data={createdUserResult} variant="user" onClose={() => setCreatedUserResult(null)} />
+      <ApiKeyDialog data={rotatedKeyResult} variant="user-rotated" onClose={() => setRotatedKeyResult(null)} />
     </div>
   );
 }

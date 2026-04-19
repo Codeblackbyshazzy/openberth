@@ -23,13 +23,15 @@ interface EditUserDialogProps {
   target: UserInfo | null;
   onClose: () => void;
   onSave: (name: string, data: { displayName?: string; password?: string; maxDeployments?: number }) => Promise<void>;
+  onRotateKey: (name: string) => Promise<void>;
 }
 
-export function EditUserDialog({ target, onClose, onSave }: EditUserDialogProps) {
+export function EditUserDialog({ target, onClose, onSave, onRotateKey }: EditUserDialogProps) {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [maxDeploys, setMaxDeploys] = useState("");
   const [saving, setSaving] = useState(false);
+  const [rotating, setRotating] = useState(false);
 
   useEffect(() => {
     if (target) {
@@ -49,6 +51,15 @@ export function EditUserDialog({ target, onClose, onSave }: EditUserDialogProps)
     if (!isNaN(maxVal) && maxVal !== target.maxDeployments) body.maxDeployments = maxVal;
     await onSave(target.name, body);
     setSaving(false);
+    onClose();
+  };
+
+  const handleRotateKey = async () => {
+    if (!target) return;
+    if (!window.confirm(`Rotate API key for "${target.name}"? Their current key will stop working immediately.`)) return;
+    setRotating(true);
+    await onRotateKey(target.name);
+    setRotating(false);
     onClose();
   };
 
@@ -75,10 +86,19 @@ export function EditUserDialog({ target, onClose, onSave }: EditUserDialogProps)
             <Input id="eu-pass" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Leave empty to keep current" />
             {password && password.length < 8 && <p className="text-xs text-destructive">Minimum 8 characters</p>}
           </div>
+          <div className="mt-2 border-t pt-4">
+            <Label className="text-xs text-muted-foreground">API key</Label>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">Generate a new API key. The current one stops working immediately.</p>
+              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive shrink-0" onClick={handleRotateKey} disabled={rotating || saving}>
+                {rotating ? "Rotating..." : "Rotate key"}
+              </Button>
+            </div>
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || (password.length > 0 && password.length < 8)}>
+          <Button variant="outline" onClick={onClose} disabled={saving || rotating}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving || rotating || (password.length > 0 && password.length < 8)}>
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

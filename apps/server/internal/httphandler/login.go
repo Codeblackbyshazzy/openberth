@@ -93,7 +93,7 @@ func (h *Handlers) SetupSubmit(w http.ResponseWriter, r *http.Request) {
 	user := &store.User{
 		ID:              "usr_" + service.RandomHex(8),
 		Name:            username,
-		APIKey:          "sc_" + service.RandomHex(24),
+		APIKey:          service.NewAPIKey(),
 		Role:            "admin",
 		MaxDeployments:  h.svc.Cfg.DefaultMaxDeploy,
 		DefaultTTLHours: h.svc.Cfg.DefaultTTLHours,
@@ -359,7 +359,7 @@ func (h *Handlers) RotateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newKey := "sc_" + service.RandomHex(24)
+	newKey := service.NewAPIKey()
 	if err := h.svc.Store.UpdateUserAPIKey(user.ID, newKey); err != nil {
 		jsonErr(w, 500, "Failed to rotate API key.")
 		return

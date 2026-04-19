@@ -76,7 +76,7 @@ func (h *Handlers) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	newUser := &store.User{
 		ID:              "usr_" + service.RandomHex(8),
 		Name:            body.Name,
-		APIKey:          "sc_" + service.RandomHex(24),
+		APIKey:          service.NewAPIKey(),
 		Role:            "user",
 		MaxDeployments:  body.MaxDeployments,
 		DefaultTTLHours: body.TTLHours,
@@ -169,6 +169,31 @@ func (h *Handlers) AdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResp(w, 200, map[string]string{"message": "User updated.", "name": name})
+}
+
+// ── Admin: Rotate User API Key ──────────────────────────────────
+
+func (h *Handlers) AdminRotateUserKey(w http.ResponseWriter, r *http.Request) {
+	adminUser := h.requireAdmin(w, r)
+	if adminUser == nil {
+		return
+	}
+
+	name := r.PathValue("name")
+	target, _ := h.svc.Store.GetUserByName(name)
+	if target == nil {
+		jsonErr(w, 404, "User not found.")
+		return
+	}
+
+	newKey := service.NewAPIKey()
+	if err := h.svc.Store.UpdateUserAPIKey(target.ID, newKey); err != nil {
+		jsonErr(w, 500, "Failed to rotate API key.")
+		return
+	}
+
+	log.Printf("[rotate-key] Admin '%s' rotated API key for user '%s'", adminUser.Name, target.Name)
+	jsonResp(w, 200, map[string]string{"apiKey": newKey, "name": target.Name})
 }
 
 // ── Admin: Settings ─────────────────────────────────────────────

@@ -249,7 +249,7 @@ func (h *Handlers) findOrCreateOIDCUser(username, displayName string) *store.Use
 	newUser := &store.User{
 		ID:              "usr_" + service.RandomHex(8),
 		Name:            username,
-		APIKey:          "sc_" + service.RandomHex(24),
+		APIKey:          service.NewAPIKey(),
 		Role:            "user",
 		MaxDeployments:  h.svc.Cfg.DefaultMaxDeploy,
 		DefaultTTLHours: h.svc.Cfg.DefaultTTLHours,

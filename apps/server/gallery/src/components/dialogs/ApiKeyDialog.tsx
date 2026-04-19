@@ -11,12 +11,17 @@ import {
 
 interface ApiKeyDialogProps {
   data: { name: string; key: string } | null;
-  variant: "deployment" | "user";
+  variant: "deployment" | "user" | "user-rotated";
   onClose: () => void;
 }
 
 export function ApiKeyDialog({ data, variant, onClose }: ApiKeyDialogProps) {
-  const title = variant === "deployment" ? "API key protection enabled" : "User created";
+  let title: string;
+  switch (variant) {
+    case "deployment": title = "API key protection enabled"; break;
+    case "user-rotated": title = "API key rotated"; break;
+    default: title = "User created";
+  }
   const nameLabel = variant === "deployment" ? "Deployment" : "Username";
 
   return (

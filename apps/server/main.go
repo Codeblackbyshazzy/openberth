@@ -112,6 +112,7 @@ func main() {
 	mux.HandleFunc("POST /api/admin/users", h.AdminCreateUser)
 	mux.HandleFunc("DELETE /api/admin/users/{name}", h.AdminDeleteUser)
 	mux.HandleFunc("PATCH /api/admin/users/{name}", h.AdminUpdateUser)
+	mux.HandleFunc("POST /api/admin/users/{name}/rotate-key", h.AdminRotateUserKey)
 	mux.HandleFunc("GET /api/admin/backup", h.AdminBackup)
 	mux.HandleFunc("POST /api/admin/restore", h.AdminRestore)
 	mux.HandleFunc("GET /api/admin/settings", h.AdminGetSettings)
