@@ -94,6 +94,7 @@ berth logs <id> --follow                  # stream logs in real time
 berth destroy <id>                        # remove deployment
 berth pull <id> --output ./backup         # download source
 berth upgrade                             # update CLI to latest version
+berth rotate-key                          # rotate your API key (old key stops working immediately)
 
 # Access control
 berth protect <id> --mode basic_auth --username admin --password secret
@@ -348,7 +349,25 @@ berth-admin user list
 berth-admin status
 berth-admin config
 berth-admin cleanup
+
+# Toggle the web dashboard at runtime (restarts the server)
+berth-admin web disable                   # API/CLI/OIDC-only mode
+berth-admin web enable
+berth-admin web status
 ```
+
+Admins can also rotate any user's API key from the gallery **Settings → Users** panel — open the edit dialog, click **Rotate key**, and the new key is shown once.
+
+### API-only mode
+
+For deployments that don't need a browser dashboard, disable the web UI entirely. This blocks `/gallery/*`, `/login`, `/setup`, and the root redirect; `/api/*`, `/oauth/*`, `/auth/oidc/*`, `/mcp`, and `/_data/*` keep working.
+
+| Entry point | Usage |
+|-------------|-------|
+| Install flag | `berth-server install --domain example.com --no-web` |
+| Runtime | `sudo berth-admin web disable` (or `enable`) |
+
+When web is disabled, `berth login` (browser callback flow) no longer works — create users with `berth-admin user add` and distribute keys out-of-band, or log in via OIDC (`/auth/oidc/start`) if configured. OAuth authorize for MCP clients continues to work; unauthenticated requests are redirected to OIDC instead of the password login page.
 
 See [Managing Users](docs/managing-users.md) for the admin HTTP API and settings (OIDC, network quota, session TTL).
 
