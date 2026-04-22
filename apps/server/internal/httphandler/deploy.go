@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -535,7 +534,3 @@ func (h *Handlers) GetSource(w http.ResponseWriter, r *http.Request) {
 	gw.Close()
 }
 
-// decodeJSONBody decodes a JSON request body into the given pointer.
-func decodeJSONBody(r *http.Request, v interface{}) error {
-	return json.NewDecoder(r.Body).Decode(v)
-}

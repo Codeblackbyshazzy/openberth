@@ -43,6 +43,8 @@ func writeErr(w http.ResponseWriter, err error) {
 
 // decodeJSON decodes a JSON request body into the given type.
 // Returns false and writes an error response if decoding fails.
+// Prefer this for named struct types; use decodeJSONBody when the caller
+// needs to inspect or tolerate decode errors (e.g. optional bodies).
 func decodeJSON[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var v T
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
@@ -50,6 +52,14 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 		return v, false
 	}
 	return v, true
+}
+
+// decodeJSONBody decodes a JSON request body into the given pointer and
+// returns the raw decode error. Use this when the caller needs to tolerate
+// empty bodies, customize the error message, or decode into an anonymous
+// struct/map where the generic decodeJSON is awkward.
+func decodeJSONBody(r *http.Request, v any) error {
+	return json.NewDecoder(r.Body).Decode(v)
 }
 
 // parseTail parses the "tail" query parameter for log requests.
