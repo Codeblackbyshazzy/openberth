@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
 
@@ -13,7 +14,7 @@ import (
 // DestroyFull removes a deployment completely: container, proxy route,
 // data store, source code, persistent data, and DB record.
 func (svc *Service) DestroyFull(d *store.Deployment) {
-	svc.Container.Destroy(d.ID)
+	svc.Runtime.Destroy(d.ID)
 	svc.Proxy.RemoveRoute(d.Subdomain)
 	svc.DataStore.DeleteDB(d.ID)
 	svc.Store.DeleteBandwidthForDeployment(d.ID)
@@ -56,12 +57,12 @@ func (svc *Service) healthSweep() {
 		return
 	}
 	for _, d := range running {
-		status := svc.Container.Status(d.ID)
-		if status == "running" {
+		status := svc.Runtime.Status(d.ID)
+		if status == runtime.StatusRunning {
 			continue
 		}
 		log.Printf("[cleanup] Container for %s is %s", d.Subdomain, status)
-		if svc.Container.Restart(d.ID) {
+		if svc.Runtime.Restart(d.ID) {
 			log.Printf("[cleanup] Restored %s after restart", d.Subdomain)
 		} else {
 			log.Printf("[cleanup] Failed to restart %s, marking as failed", d.Subdomain)
@@ -108,11 +109,11 @@ func (svc *Service) ReconcileOnStartup() {
 			svc.Store.UpdateDeploymentStatus(d.ID, "failed")
 
 		case "running":
-			containerStatus := svc.Container.Status(d.ID)
+			containerStatus := svc.Runtime.Status(d.ID)
 			switch containerStatus {
-			case "running":
+			case runtime.StatusRunning:
 				// Container is alive — read its actual port and restore proxy route
-				port := svc.Container.InspectPort(d.ID)
+				port := svc.Runtime.Port(d.ID)
 				if port == 0 {
 					log.Printf("[reconcile] Cannot determine port for %s, marking failed", d.Subdomain)
 					svc.Store.UpdateDeploymentStatus(d.ID, "failed")
@@ -126,8 +127,8 @@ func (svc *Service) ReconcileOnStartup() {
 			default:
 				// Container is exited/not_found — try to restart
 				log.Printf("[reconcile] Container for %s is %s, attempting restart", d.Subdomain, containerStatus)
-				if svc.Container.Restart(d.ID) {
-					port := svc.Container.InspectPort(d.ID)
+				if svc.Runtime.Restart(d.ID) {
+					port := svc.Runtime.Port(d.ID)
 					if port > 0 {
 						ac := AccessControlFromDeployment(&d)
 						svc.Proxy.AddRouteNoReload(d.Subdomain, port, ac)

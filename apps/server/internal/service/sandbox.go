@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
 
@@ -82,7 +82,7 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 
 	go func() {
 		startTime := time.Now()
-		result, err := svc.Container.CreateSandbox(container.SandboxOpts{
+		result, err := svc.Runtime.StartSandbox(runtime.SandboxOpts{
 			ID:           id,
 			UserID:       user.ID,
 			CodeDir:      codeDir,
@@ -100,16 +100,16 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 		if err != nil {
 			log.Printf("[sandbox] Failed for %s: %v", id, err)
 			svc.Store.UpdateDeploymentStatus(id, "failed")
-			svc.Container.Destroy(id)
+			svc.Runtime.Destroy(id)
 			return
 		}
 
-		svc.Proxy.AddRoute(subdomain, result.HostPort, proxyACFromInfo(aci))
-		svc.Store.UpdateDeploymentRunning(id, result.ContainerID, result.HostPort)
+		svc.Proxy.AddRoute(subdomain, result.Endpoint.Port, proxyACFromInfo(aci))
+		svc.Store.UpdateDeploymentRunning(id, result.InstanceID, result.Endpoint.Port)
 
 		elapsed := time.Since(startTime).Seconds()
 		log.Printf("[sandbox] %s | %s/%s | port %d | %.1fs | user=%s",
-			subdomain, fw.Language, fw.Framework, result.HostPort, elapsed, user.Name)
+			subdomain, fw.Language, fw.Framework, result.Endpoint.Port, elapsed, user.Name)
 	}()
 
 	var accessMode, apiKey string
@@ -181,7 +181,7 @@ func (svc *Service) SandboxPush(user *store.User, p PushParams) (*PushResult, er
 	}
 	if len(touchPaths) > 0 {
 		touchCmd := "touch " + strings.Join(touchPaths, " ")
-		svc.Container.ExecInContainer(deploy.ID, touchCmd, 5*time.Second)
+		svc.Runtime.Exec(deploy.ID, touchCmd, 5*time.Second)
 	}
 
 	// If dependency file changed, run install synchronously
@@ -190,11 +190,11 @@ func (svc *Service) SandboxPush(user *store.User, p PushParams) (*PushResult, er
 	if depFileChanged {
 		installCmd := detectInstallCmd(codeDir)
 		log.Printf("[sandbox-push] Dependency file changed for %s, running %s", deploy.ID, installCmd)
-		out, _, err := svc.Container.ExecInContainer(deploy.ID, installCmd, 2*time.Minute)
-		installOutput = out
+		res, err := svc.Runtime.Exec(deploy.ID, installCmd, 2*time.Minute)
+		installOutput = res.Output
 		if err != nil {
 			log.Printf("[sandbox-push] install failed for %s: %v", deploy.ID, err)
-			installOutput = out + "\nInstall failed: " + err.Error()
+			installOutput = res.Output + "\nInstall failed: " + err.Error()
 		} else {
 			depsInstalled = true
 		}
@@ -231,12 +231,12 @@ func (svc *Service) SandboxExec(user *store.User, p ExecParams) (*ExecResult, er
 		timeout = 300
 	}
 
-	out, exitCode, _ := svc.Container.ExecInContainer(deploy.ID, p.Command, time.Duration(timeout)*time.Second)
+	res, _ := svc.Runtime.Exec(deploy.ID, p.Command, time.Duration(timeout)*time.Second)
 
 	return &ExecResult{
 		ID:       deploy.ID,
-		Output:   out,
-		ExitCode: exitCode,
+		Output:   res.Output,
+		ExitCode: res.ExitCode,
 	}, nil
 }
 
@@ -285,11 +285,11 @@ func (svc *Service) SandboxInstall(user *store.User, p InstallParams) (*InstallR
 		}
 	}
 
-	out, _, err := svc.Container.ExecInContainer(deploy.ID, cmd, 2*time.Minute)
+	res, err := svc.Runtime.Exec(deploy.ID, cmd, 2*time.Minute)
 	if err != nil {
 		return &InstallResult{
 			ID:      deploy.ID,
-			Output:  out,
+			Output:  res.Output,
 			Message: fmt.Sprintf("Package %s failed: %s", action, err.Error()),
 		}, nil
 	}
@@ -298,7 +298,7 @@ func (svc *Service) SandboxInstall(user *store.User, p InstallParams) (*InstallR
 
 	return &InstallResult{
 		ID:      deploy.ID,
-		Output:  out,
+		Output:  res.Output,
 		Message: fmt.Sprintf("Successfully %sed: %s", action, pkgList),
 	}, nil
 }
@@ -343,7 +343,7 @@ func (svc *Service) PromoteSandbox(user *store.User, p PromoteParams) (*DeployRe
 		}
 	}
 
-	svc.Container.Destroy(deploy.ID)
+	svc.Runtime.Destroy(deploy.ID)
 	svc.Proxy.RemoveRoute(oldSubdomain)
 
 	svc.Store.UpdateDeploymentStatus(deploy.ID, "building")

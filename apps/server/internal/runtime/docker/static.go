@@ -1,14 +1,16 @@
-package container
+package docker
 
 import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 )
 
-// createStatic builds a read-only Caddy container to serve plain static assets.
-// Used by languages flagged StaticOnly (e.g. pure HTML/CSS/JS projects).
-func (cm *ContainerManager) createStatic(opts CreateOpts, hostPort int) (*ContainerResult, error) {
+// createStatic builds a read-only Caddy container to serve plain static
+// assets. Used by languages flagged StaticOnly (e.g. pure HTML projects).
+func (d *Driver) createStatic(opts runtime.DeployOpts, hostPort int) (*runtime.Result, error) {
 	containerName := "sc-" + opts.ID
 
 	args := []string{
@@ -19,21 +21,21 @@ func (cm *ContainerManager) createStatic(opts CreateOpts, hostPort int) (*Contai
 		"--label", "openberth.id=" + opts.ID,
 	}
 
-	if cm.gvisorReady {
+	if d.gvisorReady {
 		args = append(args, "--runtime=runsc")
 	}
 
 	args = append(args,
 		"--memory=128m",
 		"--cpus=0.25",
-		fmt.Sprintf("--pids-limit=%d", cm.cfg.Container.PIDLimit),
+		fmt.Sprintf("--pids-limit=%d", d.cfg.Container.PIDLimit),
 		"--cap-drop=ALL",
 		"--cap-add=NET_BIND_SERVICE",
 	)
-	if cm.cfg.Container.DiskSize != "" {
-		args = append(args, "--storage-opt", "size="+cm.cfg.Container.DiskSize)
+	if d.cfg.Container.DiskSize != "" {
+		args = append(args, "--storage-opt", "size="+d.cfg.Container.DiskSize)
 	}
-	if !cm.gvisorReady {
+	if !d.gvisorReady {
 		args = append(args, "--security-opt=no-new-privileges")
 	}
 	args = append(args,
@@ -56,19 +58,15 @@ func (cm *ContainerManager) createStatic(opts CreateOpts, hostPort int) (*Contai
 		cid = cid[:12]
 	}
 
-	return &ContainerResult{
-		ContainerID: cid,
-		HostPort:    hostPort,
-		Name:        containerName,
-		GVisor:      cm.gvisorReady,
-	}, nil
+	return d.makeResult(cid, containerName, hostPort), nil
 }
 
 // rebuildStatic handles updates for static-only deployments.
-// Static containers bind-mount the code directory, so files are already updated on disk.
-// We just need to restart the container to pick up any Caddy config changes.
-func (cm *ContainerManager) rebuildStatic(opts CreateOpts) (*ContainerResult, error) {
-	hostPort := cm.InspectPort(opts.ID)
+// Static containers bind-mount the code directory, so files are already
+// updated on disk. We just need to restart the container to pick up any
+// Caddy config changes.
+func (d *Driver) rebuildStatic(opts runtime.DeployOpts) (*runtime.Result, error) {
+	hostPort := d.Port(opts.ID)
 	if hostPort == 0 {
 		return nil, fmt.Errorf("cannot determine port for %s", opts.ID)
 	}
@@ -78,11 +76,12 @@ func (cm *ContainerManager) rebuildStatic(opts CreateOpts) (*ContainerResult, er
 	// Remove old container and recreate with same port
 	execCmd("docker", "rm", "-f", "sc-"+opts.ID)
 
-	return cm.createStatic(opts, hostPort)
+	return d.createStatic(opts, hostPort)
 }
 
-// createStaticSandbox serves static files with Caddy but with rw mount so pushes apply instantly.
-func (cm *ContainerManager) createStaticSandbox(opts SandboxOpts, hostPort int) (*ContainerResult, error) {
+// createStaticSandbox serves static files with Caddy but with rw mount so
+// pushes apply instantly.
+func (d *Driver) createStaticSandbox(opts runtime.SandboxOpts, hostPort int) (*runtime.Result, error) {
 	containerName := "sc-" + opts.ID
 
 	args := []string{
@@ -94,21 +93,21 @@ func (cm *ContainerManager) createStaticSandbox(opts SandboxOpts, hostPort int) 
 		"--label", "openberth.phase=sandbox",
 	}
 
-	if cm.gvisorReady {
+	if d.gvisorReady {
 		args = append(args, "--runtime=runsc")
 	}
 
 	args = append(args,
 		"--memory=128m",
 		"--cpus=0.25",
-		fmt.Sprintf("--pids-limit=%d", cm.cfg.Container.PIDLimit),
+		fmt.Sprintf("--pids-limit=%d", d.cfg.Container.PIDLimit),
 		"--cap-drop=ALL",
 		"--cap-add=NET_BIND_SERVICE",
 	)
-	if cm.cfg.Container.DiskSize != "" {
-		args = append(args, "--storage-opt", "size="+cm.cfg.Container.DiskSize)
+	if d.cfg.Container.DiskSize != "" {
+		args = append(args, "--storage-opt", "size="+d.cfg.Container.DiskSize)
 	}
-	if !cm.gvisorReady {
+	if !d.gvisorReady {
 		args = append(args, "--security-opt=no-new-privileges")
 	}
 	args = append(args,
@@ -132,10 +131,5 @@ func (cm *ContainerManager) createStaticSandbox(opts SandboxOpts, hostPort int) 
 
 	log.Printf("[sandbox] Started static sandbox %s (container=%s, port=%d)", opts.ID, cid, hostPort)
 
-	return &ContainerResult{
-		ContainerID: cid,
-		HostPort:    hostPort,
-		Name:        containerName,
-		GVisor:      cm.gvisorReady,
-	}, nil
+	return d.makeResult(cid, containerName, hostPort), nil
 }

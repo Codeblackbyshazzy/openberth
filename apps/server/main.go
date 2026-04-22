@@ -13,12 +13,16 @@ import (
 
 	"github.com/AmirSoleimani/openberth/apps/server/internal/bandwidth"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/config"
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/datastore"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/httphandler"
 	mcphandler "github.com/AmirSoleimani/openberth/apps/server/internal/httphandler/mcp"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/install"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/proxy"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
+	// Runtime drivers self-register in their init functions. Blank-import
+	// each driver this binary should ship. Contributors adding new drivers
+	// (kubernetes, firecracker, …) land here too.
+	_ "github.com/AmirSoleimani/openberth/apps/server/internal/runtime/docker"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/service"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
@@ -50,12 +54,15 @@ func main() {
 	defer dataStore.Close()
 
 	// Initialize services
-	cm := container.NewContainerManager(cfg)
+	rt, err := runtime.Load(cfg)
+	if err != nil {
+		log.Fatalf("Runtime init: %v", err)
+	}
 	pm := proxy.NewProxyManager(cfg)
 	ds := datastore.NewManager(cfg.PersistDir)
 	defer ds.Close()
 
-	svc := service.NewService(cfg, dataStore, cm, pm, ds)
+	svc := service.NewService(cfg, dataStore, rt, pm, ds)
 	bt := bandwidth.NewTracker(svc, cfg.CaddyAccessLog)
 	svc.SetBandwidth(bt)
 
@@ -212,7 +219,7 @@ func main() {
 	log.Printf("   Domain:  %s", cfg.Domain)
 	log.Printf("   Listen:  %s", addr)
 	log.Printf("   Data:    %s", cfg.DataDir)
-	log.Printf("   gVisor:  %v", cm.GVisorAvailable())
+	log.Printf("   gVisor:  %v", rt.Capabilities().SecureIsolation)
 	log.Println("")
 
 	// Graceful shutdown

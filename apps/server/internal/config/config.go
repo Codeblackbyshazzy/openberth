@@ -17,6 +17,13 @@ type ContainerDefaults struct {
 	NetworkQuota string `json:"networkQuota"` // max network transfer per container, e.g. "5g" (enforced via Caddy access log)
 }
 
+// RuntimeConfig picks the deploy backend and holds driver-specific settings.
+// Driver is the registry key; empty defaults to "docker". Per-driver config
+// blocks (e.g. Kubernetes{}) can be added here as new drivers land.
+type RuntimeConfig struct {
+	Driver string `json:"driver,omitempty"`
+}
+
 type Config struct {
 	Domain          string            `json:"domain"`
 	Port            int               `json:"port"`
@@ -24,6 +31,7 @@ type Config struct {
 	DefaultTTLHours int               `json:"defaultTTLHours"`
 	DefaultMaxDeploy int              `json:"defaultMaxDeploys"`
 	Container       ContainerDefaults `json:"containerDefaults"`
+	Runtime         RuntimeConfig     `json:"runtime,omitempty"`
 	CloudflareProxy bool              `json:"cloudflareProxy"`
 	Insecure        bool              `json:"insecure"`
 	WebDisabled     bool              `json:"webDisabled"`

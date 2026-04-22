@@ -2,7 +2,6 @@ package install
 
 import "fmt"
 
-const totalSteps = 20
 const dataDir = "/var/lib/openberth"
 
 // StepStatus represents the current state of a provisioning step.
@@ -33,6 +32,7 @@ type Config struct {
 	Domain          string
 	AdminKey        string
 	AdminPassword   string
+	Driver          string // runtime driver name; empty defaults to "docker"
 	CloudflareProxy bool
 	Insecure        bool
 	WebDisabled     bool
@@ -53,6 +53,9 @@ func (c *Config) setDefaults() {
 	if c.AdminPassword == "" {
 		c.AdminPassword = generatePassword()
 	}
+	if c.Driver == "" {
+		c.Driver = "docker"
+	}
 }
 
 func (c *Config) validate() error {
@@ -65,10 +68,13 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// provisioner runs the 20-step provisioning sequence locally.
+// provisioner runs the provisioning sequence locally. The step list is
+// composed at run time from four phases — see runAll. Driver-specific
+// steps are contributed by the runtime driver matching cfg.Driver.
 type provisioner struct {
 	cfg     *Config
 	onEvent EventHandler
+	total   int // set at the start of runAll for progress emits
 }
 
 func (p *provisioner) emit(step string, status StepStatus, msg, detail string, progress int) {
@@ -79,77 +85,45 @@ func (p *provisioner) emit(step string, status StepStatus, msg, detail string, p
 			Message:  msg,
 			Detail:   detail,
 			Progress: progress,
-			Total:    totalSteps,
+			Total:    p.total,
 		})
 	}
 }
 
-// runAll executes all provisioning steps in order.
+// runAll executes the four-phase install sequence. Phase 2 (driver-specific)
+// is contributed by the registered Installer matching cfg.Driver; other
+// phases are universal.
 func (p *provisioner) runAll() error {
-	steps := []struct {
-		name string
-		fn   func() error
-	}{
-		{"check_root", p.checkRoot},
-		{"install_packages", p.installPackages},
-		{"install_docker", p.installDocker},
-		{"install_gvisor", p.installGVisor},
-		{"test_gvisor", p.testGVisor},
-		{"install_caddy", p.installCaddy},
-		{"pull_images", p.pullImages},
-		{"create_directories", p.createDirectories},
-		{"create_volumes", p.createVolumes},
-		{"write_config", p.writeConfig},
-		{"init_database", p.initDatabase},
-		{"write_caddyfile", p.writeCaddyfile},
-		{"verify_binary", p.verifyBinary},
-		{"write_admin_script", p.writeAdminScript},
-		{"write_systemd_service", p.writeSystemdService},
-		{"enable_services", p.enableServices},
-		{"configure_firewall", p.configureFirewall},
-		{"verify_dns", p.verifyDNS},
-		{"health_check", p.healthCheck},
-		{"print_summary", p.printSummary},
+	inst, err := GetInstaller(p.cfg.Driver)
+	if err != nil {
+		return err
 	}
 
+	steps := make([]Step, 0, 20)
+	steps = append(steps, preflightSteps()...)
+	steps = append(steps, inst.Steps()...)
+	steps = append(steps, infraSteps()...)
+	steps = append(steps, activationSteps()...)
+
+	p.total = len(steps)
+
 	for i, s := range steps {
-		step := i + 1
-		p.emit(s.name, StepRunning, stepMessage(s.name), "", step)
-		if err := s.fn(); err != nil {
-			p.emit(s.name, StepFailed, stepMessage(s.name), err.Error(), step)
-			return fmt.Errorf("step %d/%d (%s): %w", step, totalSteps, s.name, err)
+		stepNum := i + 1
+		p.emit(s.Name, StepRunning, s.Description, "", stepNum)
+
+		ctx := &Ctx{prov: p, name: s.Name, progress: stepNum}
+		runErr := s.Run(ctx)
+
+		if runErr != nil {
+			p.emit(s.Name, StepFailed, s.Description, runErr.Error(), stepNum)
+			return fmt.Errorf("step %d/%d (%s): %w", stepNum, p.total, s.Name, runErr)
+		}
+
+		// If the step didn't call Done/Warn, emit the default Completed.
+		if !ctx.emitted {
+			p.emit(s.Name, StepCompleted, s.Description, "", stepNum)
 		}
 	}
 
 	return nil
 }
-
-func stepMessage(name string) string {
-	messages := map[string]string{
-		"check_root":            "Verifying root access",
-		"install_packages":      "Installing system packages",
-		"install_docker":        "Installing Docker",
-		"install_gvisor":        "Installing gVisor sandbox runtime",
-		"test_gvisor":           "Testing gVisor runtime",
-		"install_caddy":         "Installing Caddy web server",
-		"pull_images":           "Pulling base Docker images",
-		"create_directories":    "Creating data directories",
-		"create_volumes":        "Creating Docker volumes",
-		"write_config":          "Writing OpenBerth configuration",
-		"init_database":         "Initializing database",
-		"write_caddyfile":       "Writing Caddy configuration",
-		"verify_binary":         "Installing server binary",
-		"write_admin_script":    "Writing admin CLI script",
-		"write_systemd_service": "Writing systemd service",
-		"enable_services":       "Enabling and starting services",
-		"configure_firewall":    "Configuring firewall",
-		"verify_dns":            "Verifying DNS records",
-		"health_check":          "Running health check",
-		"print_summary":         "Setup complete",
-	}
-	if msg, ok := messages[name]; ok {
-		return msg
-	}
-	return name
-}
-

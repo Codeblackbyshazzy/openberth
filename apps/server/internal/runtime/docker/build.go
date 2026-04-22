@@ -1,4 +1,4 @@
-package container
+package docker
 
 import (
 	"fmt"
@@ -9,21 +9,23 @@ import (
 	"time"
 
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 )
 
-// Create runs a two-phase deploy:
+// Deploy runs a fresh two-phase install: build into a named volume, then
+// start the runtime container. Used by berth_deploy and CLI `berth deploy`.
 //
-//	Phase 1 (build): gVisor, no memory limit
-//	Phase 2 (run):   gVisor, tight limits
-func (cm *ContainerManager) Create(opts CreateOpts) (*ContainerResult, error) {
-	hostPort, err := cm.findPort()
+//	Phase 1 (build): gVisor (when available), unconstrained memory
+//	Phase 2 (run):   gVisor (when available), tight memory/CPU/PID limits
+func (d *Driver) Deploy(opts runtime.DeployOpts) (*runtime.Result, error) {
+	hostPort, err := d.findPort()
 	if err != nil {
 		return nil, err
 	}
 
 	p := framework.GetProvider(opts.Language)
 	if p != nil && p.StaticOnly() {
-		return cm.createStatic(opts, hostPort)
+		return d.createStatic(opts, hostPort)
 	}
 
 	volumeName := volumeForDeploy(opts.ID)
@@ -34,14 +36,14 @@ func (cm *ContainerManager) Create(opts CreateOpts) (*ContainerResult, error) {
 		return nil, fmt.Errorf("create volume: %w", err)
 	}
 
-	if err := cm.runBuild(opts, volumeName, ""); err != nil {
+	if err := d.runBuild(opts, volumeName, ""); err != nil {
 		execCmd("docker", "volume", "rm", "-f", volumeName)
 		return nil, err
 	}
 
 	log.Printf("[build] Phase 1 complete for %s", opts.ID)
 
-	result, err := cm.startRuntime(opts, volumeName, hostPort)
+	result, err := d.startRuntime(opts, volumeName, hostPort)
 	if err != nil {
 		execCmd("docker", "volume", "rm", "-f", volumeName)
 		return nil, err
@@ -50,21 +52,23 @@ func (cm *ContainerManager) Create(opts CreateOpts) (*ContainerResult, error) {
 	return result, nil
 }
 
-// Rebuild does a blue-green deploy.
-func (cm *ContainerManager) Rebuild(opts CreateOpts) (*ContainerResult, error) {
+// Rebuild does a blue-green deploy: build a fresh volume, swap the runtime
+// container over, then drop the old volume. On swap failure the old volume
+// is relaunched as a rollback and the new one is discarded.
+func (d *Driver) Rebuild(opts runtime.DeployOpts) (*runtime.Result, error) {
 	p := framework.GetProvider(opts.Language)
 	if p != nil && p.StaticOnly() {
-		return cm.rebuildStatic(opts)
+		return d.rebuildStatic(opts)
 	}
 
 	runnerName := "sc-" + opts.ID
 
-	oldVolume := cm.currentVolume(opts.ID)
+	oldVolume := d.currentVolume(opts.ID)
 	if oldVolume == "" {
 		return nil, fmt.Errorf("cannot find current volume for %s", opts.ID)
 	}
 
-	hostPort := cm.InspectPort(opts.ID)
+	hostPort := d.Port(opts.ID)
 	if hostPort == 0 {
 		return nil, fmt.Errorf("cannot determine port for %s", opts.ID)
 	}
@@ -77,7 +81,7 @@ func (cm *ContainerManager) Rebuild(opts CreateOpts) (*ContainerResult, error) {
 	}
 
 	// Build container mounts old volume at /old:ro — providers copy cache directly
-	if err := cm.runBuild(opts, newVolume, oldVolume); err != nil {
+	if err := d.runBuild(opts, newVolume, oldVolume); err != nil {
 		execCmd("docker", "volume", "rm", "-f", newVolume)
 		return nil, err
 	}
@@ -85,10 +89,10 @@ func (cm *ContainerManager) Rebuild(opts CreateOpts) (*ContainerResult, error) {
 	log.Printf("[rebuild] Swapping runtime for %s (port %d)", opts.ID, hostPort)
 	execCmd("docker", "rm", "-f", runnerName)
 
-	result, err := cm.startRuntime(opts, newVolume, hostPort)
+	result, err := d.startRuntime(opts, newVolume, hostPort)
 	if err != nil {
 		log.Printf("[rebuild] New runtime failed, rolling back: %v", err)
-		cm.startRuntime(opts, oldVolume, hostPort)
+		d.startRuntime(opts, oldVolume, hostPort)
 		execCmd("docker", "volume", "rm", "-f", newVolume)
 		return nil, fmt.Errorf("swap failed: %w", err)
 	}
@@ -98,23 +102,23 @@ func (cm *ContainerManager) Rebuild(opts CreateOpts) (*ContainerResult, error) {
 	return result, nil
 }
 
-// RecreateRuntime stops the current runtime and starts a new one with the same
-// build volume but potentially different env vars. Skips the build phase entirely.
-// Used for secret rotation where code hasn't changed.
-func (cm *ContainerManager) RecreateRuntime(opts CreateOpts) (*ContainerResult, error) {
+// RestartRuntime relaunches just the runtime container against the existing
+// build volume. Used after a secret rotation where the code is unchanged
+// but environment needs a refresh.
+func (d *Driver) RestartRuntime(opts runtime.DeployOpts) (*runtime.Result, error) {
 	p := framework.GetProvider(opts.Language)
 	if p != nil && p.StaticOnly() {
-		return cm.rebuildStatic(opts)
+		return d.rebuildStatic(opts)
 	}
 
 	runnerName := "sc-" + opts.ID
 
-	volume := cm.currentVolume(opts.ID)
+	volume := d.currentVolume(opts.ID)
 	if volume == "" {
 		return nil, fmt.Errorf("cannot find current volume for %s", opts.ID)
 	}
 
-	hostPort := cm.InspectPort(opts.ID)
+	hostPort := d.Port(opts.ID)
 	if hostPort == 0 {
 		return nil, fmt.Errorf("cannot determine port for %s", opts.ID)
 	}
@@ -122,7 +126,7 @@ func (cm *ContainerManager) RecreateRuntime(opts CreateOpts) (*ContainerResult, 
 	log.Printf("[restart] Restarting runtime for %s (port %d, same volume %s)", opts.ID, hostPort, volume)
 	execCmd("docker", "rm", "-f", runnerName)
 
-	result, err := cm.startRuntime(opts, volume, hostPort)
+	result, err := d.startRuntime(opts, volume, hostPort)
 	if err != nil {
 		return nil, fmt.Errorf("restart failed: %w", err)
 	}
@@ -132,8 +136,8 @@ func (cm *ContainerManager) RecreateRuntime(opts CreateOpts) (*ContainerResult, 
 }
 
 // runBuild executes the build phase: a short-lived container that produces
-// the artifacts into a named volume. The volume becomes the /app for runtime.
-func (cm *ContainerManager) runBuild(opts CreateOpts, volumeName string, oldVolume string) error {
+// the artifacts into a named volume. The volume becomes /app for runtime.
+func (d *Driver) runBuild(opts runtime.DeployOpts, volumeName string, oldVolume string) error {
 	p := framework.GetProvider(opts.Language)
 	buildScript := p.BuildScript(fwInfoFromOpts(opts))
 	buildScriptPath := filepath.Join(opts.CodeDir, ".openberth-build.sh")
@@ -149,16 +153,16 @@ func (cm *ContainerManager) runBuild(opts CreateOpts, volumeName string, oldVolu
 		"--label", "openberth.phase=build",
 	}
 
-	if cm.gvisorReady {
+	if d.gvisorReady {
 		buildArgs = append(buildArgs, "--runtime=runsc")
 	}
 
 	buildArgs = append(buildArgs,
-		"--cpus="+cm.cfg.Container.CPUs,
-		fmt.Sprintf("--pids-limit=%d", cm.cfg.Container.PIDLimit*2),
+		"--cpus="+d.cfg.Container.CPUs,
+		fmt.Sprintf("--pids-limit=%d", d.cfg.Container.PIDLimit*2),
 		"--cap-drop=ALL",
 	)
-	if !cm.gvisorReady {
+	if !d.gvisorReady {
 		buildArgs = append(buildArgs, "--security-opt=no-new-privileges")
 	}
 
@@ -198,8 +202,8 @@ func (cm *ContainerManager) runBuild(opts CreateOpts, volumeName string, oldVolu
 }
 
 // startRuntime starts the runtime container from a prebuilt volume.
-func (cm *ContainerManager) startRuntime(opts CreateOpts, volumeName string, hostPort int) (*ContainerResult, error) {
-	log.Printf("[run] Starting runtime for %s on port %d (image=%s)", opts.ID, hostPort, opts.runtimeImage())
+func (d *Driver) startRuntime(opts runtime.DeployOpts, volumeName string, hostPort int) (*runtime.Result, error) {
+	log.Printf("[run] Starting runtime for %s on port %d (image=%s)", opts.ID, hostPort, runtimeImage(opts))
 
 	p := framework.GetProvider(opts.Language)
 	runScript := p.RunScript(fwInfoFromOpts(opts))
@@ -219,31 +223,31 @@ func (cm *ContainerManager) startRuntime(opts CreateOpts, volumeName string, hos
 		"--label", "openberth.volume=" + volumeName,
 	}
 
-	if cm.gvisorReady {
+	if d.gvisorReady {
 		runArgs = append(runArgs, "--runtime=runsc")
 	}
 
 	memory := opts.Memory
 	if memory == "" {
-		memory = cm.cfg.Container.Memory
+		memory = d.cfg.Container.Memory
 	}
 	cpus := opts.CPUs
 	if cpus == "" {
-		cpus = cm.cfg.Container.CPUs
+		cpus = d.cfg.Container.CPUs
 	}
 	runArgs = append(runArgs,
 		"--memory="+memory,
 		"--cpus="+cpus,
-		fmt.Sprintf("--pids-limit=%d", cm.cfg.Container.PIDLimit),
+		fmt.Sprintf("--pids-limit=%d", d.cfg.Container.PIDLimit),
 		"--cap-drop=ALL",
 	)
-	if cm.cfg.Container.DiskSize != "" {
-		runArgs = append(runArgs, "--storage-opt", "size="+cm.cfg.Container.DiskSize)
+	if d.cfg.Container.DiskSize != "" {
+		runArgs = append(runArgs, "--storage-opt", "size="+d.cfg.Container.DiskSize)
 	}
-	if !cm.gvisorReady {
+	if !d.gvisorReady {
 		runArgs = append(runArgs, "--security-opt=no-new-privileges")
 	}
-	persistDir := filepath.Join(cm.cfg.PersistDir, opts.ID)
+	persistDir := filepath.Join(d.cfg.PersistDir, opts.ID)
 	os.MkdirAll(persistDir, 0755)
 
 	runArgs = append(runArgs,
@@ -270,7 +274,7 @@ func (cm *ContainerManager) startRuntime(opts CreateOpts, volumeName string, hos
 	}
 
 	// Use the runtime image (may differ from build image for compiled languages)
-	runArgs = append(runArgs, opts.runtimeImage(), "/bin/sh", "/app/code/.openberth-run.sh")
+	runArgs = append(runArgs, runtimeImage(opts), "/bin/sh", "/app/code/.openberth-run.sh")
 
 	out, err := execCmd("docker", runArgs...)
 	if err != nil {
@@ -284,10 +288,5 @@ func (cm *ContainerManager) startRuntime(opts CreateOpts, volumeName string, hos
 
 	log.Printf("[run] Started %s (container=%s, port=%d, volume=%s)", opts.ID, cid, hostPort, volumeName)
 
-	return &ContainerResult{
-		ContainerID: cid,
-		HostPort:    hostPort,
-		Name:        containerName,
-		GVisor:      cm.gvisorReady,
-	}, nil
+	return d.makeResult(cid, containerName, hostPort), nil
 }

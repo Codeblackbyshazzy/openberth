@@ -1,4 +1,4 @@
-package container
+package docker
 
 import (
 	"fmt"
@@ -9,34 +9,22 @@ import (
 	"time"
 
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 )
 
-type SandboxOpts struct {
-	ID           string
-	UserID       string
-	CodeDir      string // {DeploysDir}/{id} — mounted rw at /app
-	Framework    string
-	Language     string
-	DevCmd       string // e.g. "npx vite dev --host 0.0.0.0 --port $PORT"
-	InstallCmd   string // custom install override from .berth.json
-	Port         int    // container port
-	Image        string // e.g. node:20-slim
-	FrameworkEnv map[string]string
-	UserEnv      map[string]string
-	Memory       string
-	NetworkQuota string // per-sandbox override
-}
-
-// CreateSandbox starts a long-lived container with a dev server and bind-mounted code.
-func (cm *ContainerManager) CreateSandbox(opts SandboxOpts) (*ContainerResult, error) {
-	hostPort, err := cm.findPort()
+// StartSandbox brings up a long-lived dev container with bind-mounted code.
+// Pushes from berth_sandbox_push apply instantly because the source is
+// mounted rw — HMR-aware frameworks (Vite, Next.js) reload without a
+// full rebuild; others get picked up on process restart.
+func (d *Driver) StartSandbox(opts runtime.SandboxOpts) (*runtime.Result, error) {
+	hostPort, err := d.findPort()
 	if err != nil {
 		return nil, err
 	}
 
 	p := framework.GetProvider(opts.Language)
 	if p != nil && p.StaticOnly() {
-		return cm.createStaticSandbox(opts, hostPort)
+		return d.createStaticSandbox(opts, hostPort)
 	}
 
 	// Write the sandbox entrypoint script
@@ -56,7 +44,7 @@ func (cm *ContainerManager) CreateSandbox(opts SandboxOpts) (*ContainerResult, e
 		"--label", "openberth.phase=sandbox",
 	}
 
-	if cm.gvisorReady {
+	if d.gvisorReady {
 		args = append(args, "--runtime=runsc")
 	}
 
@@ -66,19 +54,19 @@ func (cm *ContainerManager) CreateSandbox(opts SandboxOpts) (*ContainerResult, e
 	}
 	args = append(args,
 		"--memory="+memory,
-		"--cpus="+cm.cfg.Container.CPUs,
-		fmt.Sprintf("--pids-limit=%d", cm.cfg.Container.PIDLimit*2),
+		"--cpus="+d.cfg.Container.CPUs,
+		fmt.Sprintf("--pids-limit=%d", d.cfg.Container.PIDLimit*2),
 		"--cap-drop=ALL",
 	)
-	if cm.cfg.Container.DiskSize != "" {
-		args = append(args, "--storage-opt", "size="+cm.cfg.Container.DiskSize)
+	if d.cfg.Container.DiskSize != "" {
+		args = append(args, "--storage-opt", "size="+d.cfg.Container.DiskSize)
 	}
-	if !cm.gvisorReady {
+	if !d.gvisorReady {
 		args = append(args, "--security-opt=no-new-privileges")
 	}
 
 	// Bind mount code dir rw (not a Docker volume — pushes apply instantly)
-	persistDir := filepath.Join(cm.cfg.PersistDir, opts.ID)
+	persistDir := filepath.Join(d.cfg.PersistDir, opts.ID)
 	os.MkdirAll(persistDir, 0755)
 
 	args = append(args,
@@ -133,19 +121,13 @@ func (cm *ContainerManager) CreateSandbox(opts SandboxOpts) (*ContainerResult, e
 
 	// Verify container started
 	time.Sleep(2 * time.Second)
-	status := cm.Status(opts.ID)
-	if status != "running" {
-		logs := cm.Logs(opts.ID, 50)
-		cm.Destroy(opts.ID)
-		return nil, fmt.Errorf("sandbox container failed to start (status=%s). Logs:\n%s", status, logs)
+	if d.Status(opts.ID) != runtime.StatusRunning {
+		logs := d.Logs(opts.ID, 50)
+		d.Destroy(opts.ID)
+		return nil, fmt.Errorf("sandbox container failed to start. Logs:\n%s", logs)
 	}
 
 	log.Printf("[sandbox] Started %s (container=%s, port=%d)", opts.ID, cid, hostPort)
 
-	return &ContainerResult{
-		ContainerID: cid,
-		HostPort:    hostPort,
-		Name:        containerName,
-		GVisor:      cm.gvisorReady,
-	}, nil
+	return d.makeResult(cid, containerName, hostPort), nil
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/rs/xid"
 
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/proxy"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
@@ -193,7 +193,7 @@ func proxyACFromInfo(aci *accessControlInfo) *proxy.AccessControl {
 func (svc *Service) buildAndStart(p buildStartParams) {
 	go func() {
 		startTime := time.Now()
-		result, err := svc.Container.Create(container.CreateOpts{
+		result, err := svc.Runtime.Deploy(runtime.DeployOpts{
 			ID:           p.ID,
 			UserID:       p.UserID,
 			CodeDir:      p.CodeDir,
@@ -215,14 +215,14 @@ func (svc *Service) buildAndStart(p buildStartParams) {
 		if err != nil {
 			log.Printf("[%s] Build failed for %s: %v", p.LogPrefix, p.ID, err)
 			svc.Store.UpdateDeploymentStatus(p.ID, "failed")
-			svc.Container.Destroy(p.ID)
+			svc.Runtime.Destroy(p.ID)
 			return
 		}
-		svc.Proxy.AddRoute(p.Subdomain, result.HostPort, proxyACFromInfo(p.AC))
-		svc.Store.UpdateDeploymentRunning(p.ID, result.ContainerID, result.HostPort)
+		svc.Proxy.AddRoute(p.Subdomain, result.Endpoint.Port, proxyACFromInfo(p.AC))
+		svc.Store.UpdateDeploymentRunning(p.ID, result.InstanceID, result.Endpoint.Port)
 		elapsed := time.Since(startTime).Seconds()
 		log.Printf("[%s] %s | %s/%s | port %d | gVisor=%v | %.1fs | user=%s",
-			p.LogPrefix, p.Subdomain, p.FW.Language, p.FW.Framework, result.HostPort, result.GVisor, elapsed, p.UserName)
+			p.LogPrefix, p.Subdomain, p.FW.Language, p.FW.Framework, result.Endpoint.Port, result.Isolated, elapsed, p.UserName)
 	}()
 }
 
@@ -231,7 +231,7 @@ func (svc *Service) buildAndStart(p buildStartParams) {
 func (svc *Service) rebuildAndStart(deploy *store.Deployment, userName string, fw *frameworkInfo, port int, envVars map[string]string, memory, cpus, networkQuota, logPrefix string) {
 	codeDir := filepath.Join(svc.Cfg.DeploysDir, deploy.ID)
 	go func() {
-		result, err := svc.Container.Rebuild(container.CreateOpts{
+		result, err := svc.Runtime.Rebuild(runtime.DeployOpts{
 			ID:           deploy.ID,
 			UserID:       deploy.UserID,
 			CodeDir:      codeDir,
@@ -255,9 +255,9 @@ func (svc *Service) rebuildAndStart(deploy *store.Deployment, userName string, f
 			svc.Store.UpdateDeploymentStatus(deploy.ID, "failed")
 			return
 		}
-		svc.Store.UpdateDeploymentRunning(deploy.ID, result.ContainerID, result.HostPort)
+		svc.Store.UpdateDeploymentRunning(deploy.ID, result.InstanceID, result.Endpoint.Port)
 		svc.Store.UpdateDeploymentNetworkQuota(deploy.ID, networkQuota)
-		svc.Proxy.AddRoute(deploy.Subdomain, result.HostPort, AccessControlFromDeployment(deploy))
+		svc.Proxy.AddRoute(deploy.Subdomain, result.Endpoint.Port, AccessControlFromDeployment(deploy))
 		log.Printf("[%s] %s rebuilt | user=%s", logPrefix, deploy.Subdomain, userName)
 	}()
 }

@@ -22,7 +22,7 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"version": h.version,
 		"domain":  h.svc.Cfg.Domain,
-		"gvisor":  h.svc.Container.GVisorAvailable(),
+		"gvisor":  h.svc.Runtime.Capabilities().SecureIsolation,
 	})
 }
 

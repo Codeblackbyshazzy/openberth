@@ -6,7 +6,7 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/secret"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
@@ -166,7 +166,7 @@ func (svc *Service) recreateForSecretRotation(deploy *store.Deployment, userName
 		cpus = svc.Cfg.Container.CPUs
 	}
 
-	result, err := svc.Container.RecreateRuntime(container.CreateOpts{
+	result, err := svc.Runtime.RestartRuntime(runtime.DeployOpts{
 		ID:           deploy.ID,
 		UserID:       deploy.UserID,
 		CodeDir:      codeDir,
@@ -187,8 +187,8 @@ func (svc *Service) recreateForSecretRotation(deploy *store.Deployment, userName
 		svc.Store.UpdateDeploymentStatus(deploy.ID, "failed")
 		return
 	}
-	svc.Store.UpdateDeploymentRunning(deploy.ID, result.ContainerID, result.HostPort)
-	svc.Proxy.AddRoute(deploy.Subdomain, result.HostPort, AccessControlFromDeployment(deploy))
+	svc.Store.UpdateDeploymentRunning(deploy.ID, result.InstanceID, result.Endpoint.Port)
+	svc.Proxy.AddRoute(deploy.Subdomain, result.Endpoint.Port, AccessControlFromDeployment(deploy))
 	log.Printf("[secret-rotate] %s restarted | user=%s", deploy.Subdomain, userName)
 }
 

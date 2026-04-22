@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
@@ -249,13 +249,13 @@ func (svc *Service) RebuildAll() int {
 			json.Unmarshal([]byte(d.EnvJSON), &userEnv)
 		}
 
-		svc.Container.Destroy(d.ID)
+		svc.Runtime.Destroy(d.ID)
 		svc.Store.UpdateDeploymentStatus(d.ID, "building")
 		rebuilding++
 
 		go func(deploy store.Deployment, fw *framework.FrameworkInfo, env map[string]string) {
 			ac := AccessControlFromDeployment(&deploy)
-			result, err := svc.Container.Create(container.CreateOpts{
+			result, err := svc.Runtime.Deploy(runtime.DeployOpts{
 				ID:           deploy.ID,
 				UserID:       deploy.UserID,
 				CodeDir:      filepath.Join(svc.Cfg.DeploysDir, deploy.ID),
@@ -279,9 +279,9 @@ func (svc *Service) RebuildAll() int {
 				svc.Store.UpdateDeploymentStatus(deploy.ID, "failed")
 				return
 			}
-			svc.Store.UpdateDeploymentRunning(deploy.ID, result.ContainerID, result.HostPort)
-			svc.Proxy.AddRoute(deploy.Subdomain, result.HostPort, ac)
-			log.Printf("[restore] Rebuilt %s on port %d", deploy.Subdomain, result.HostPort)
+			svc.Store.UpdateDeploymentRunning(deploy.ID, result.InstanceID, result.Endpoint.Port)
+			svc.Proxy.AddRoute(deploy.Subdomain, result.Endpoint.Port, ac)
+			log.Printf("[restore] Rebuilt %s on port %d", deploy.Subdomain, result.Endpoint.Port)
 		}(d, fw, userEnv)
 	}
 

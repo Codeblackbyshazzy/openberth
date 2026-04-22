@@ -113,15 +113,6 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target`
 
-const daemonJSONTemplate = `{
-    "runtimes": {
-        "runsc": {
-            "path": "/usr/local/bin/runsc",
-            "runtimeArgs": ["--network=sandbox", "--platform=systrap"]
-        }
-    }
-}`
-
 const dbInitSQLTemplate = `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,

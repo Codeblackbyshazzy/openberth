@@ -82,6 +82,7 @@ func Run(args []string) {
 
 	fs.StringVar(&cfg.Domain, "domain", "", "OpenBerth domain (required)")
 	fs.StringVar(&cfg.AdminKey, "admin-key", "", "Admin API key (auto-generated if omitted)")
+	fs.StringVar(&cfg.Driver, "runtime", "", "Runtime driver (default: docker). Must match a registered driver.")
 	fs.IntVar(&cfg.MaxDeploys, "max-deploys", 0, "Max deployments per user (default: 10)")
 	fs.IntVar(&cfg.DefaultTTL, "default-ttl", 0, "Default TTL hours (default: 72)")
 	fs.BoolVar(&cfg.CloudflareProxy, "cloudflare", false, "Use Cloudflare proxy mode (no ACME, internal TLS)")
@@ -102,6 +103,7 @@ func Run(args []string) {
   %sOPTIONS%s
     --domain <domain>       OpenBerth domain (required)
     --admin-key <key>       Admin API key (auto-generated if omitted)
+    --runtime <name>        Runtime driver (default: docker)
     --max-deploys <n>       Max deployments per user (default: 10)
     --default-ttl <hours>   Default TTL hours (default: 72)
     --cloudflare            Use Cloudflare proxy mode (no ACME, internal TLS)

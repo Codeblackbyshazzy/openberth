@@ -67,7 +67,7 @@ func (svc *Service) GetDeployment(user *store.User, id string) (*DeployInfo, err
 		Subdomain:       deploy.Subdomain,
 		Framework:       deploy.Framework,
 		Status:          deploy.Status,
-		ContainerStatus: svc.Container.Status(deploy.ID),
+		ContainerStatus: string(svc.Runtime.Status(deploy.ID)),
 		URL:             svc.deployURL(deploy.Subdomain),
 		Port:            deploy.Port,
 		CreatedAt:       deploy.CreatedAt,
@@ -109,7 +109,7 @@ func (svc *Service) GetLogs(user *store.User, id string, tail int) (*LogsResult,
 
 	return &LogsResult{
 		ID:   deploy.ID,
-		Logs: svc.Container.Logs(deploy.ID, tail),
+		Logs: svc.Runtime.Logs(deploy.ID, tail),
 	}, nil
 }
 
@@ -125,7 +125,7 @@ func (svc *Service) GetLogStream(user *store.User, id string, tail int) (io.Read
 	if !CanMutateDeploy(deploy, user) {
 		return nil, ErrForbidden("Not your deployment.")
 	}
-	return svc.Container.LogStream(deploy.ID, tail)
+	return svc.Runtime.LogStream(deploy.ID, tail)
 }
 
 // ── List Deployments ────────────────────────────────────────────────
