@@ -47,7 +47,11 @@ func main() {
 	}
 
 	// Initialize store
-	dataStore, err := store.NewStore(cfg.DBPath)
+	masterKey, err := cfg.GetMasterKeyBytes()
+	if err != nil {
+		log.Fatalf("Failed to decode master key: %v", err)
+	}
+	dataStore, err := store.NewStore(cfg.DBPath, masterKey)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -59,6 +63,7 @@ func main() {
 		log.Fatalf("Runtime init: %v", err)
 	}
 	pm := proxy.NewProxyManager(cfg)
+	pm.NormalizeSiteFileModes()
 	ds := datastore.NewManager(cfg.PersistDir)
 	defer ds.Close()
 
