@@ -6,7 +6,7 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/framework"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/secret"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
@@ -71,7 +71,7 @@ func (svc *Service) SecretSet(user *store.User, name, value, description string,
 	// Creator/admin gate for globals. User-scoped secrets are implicitly
 	// owned by the querying user (user_id scoped), so only globals need the
 	// CreatedBy check.
-	if isUpdate && global && user.Role != "admin" {
+	if isUpdate && global && !IsAdmin(user) {
 		if existing.CreatedBy == nil || *existing.CreatedBy != user.ID {
 			return nil, ErrForbidden("Only the creator of this global secret (or an admin) can update it.")
 		}
@@ -166,7 +166,7 @@ func (svc *Service) recreateForSecretRotation(deploy *store.Deployment, userName
 		cpus = svc.Cfg.Container.CPUs
 	}
 
-	result, err := svc.Container.RecreateRuntime(container.CreateOpts{
+	result, err := svc.Runtime.RestartRuntime(runtime.DeployOpts{
 		ID:           deploy.ID,
 		UserID:       deploy.UserID,
 		CodeDir:      codeDir,
@@ -187,8 +187,8 @@ func (svc *Service) recreateForSecretRotation(deploy *store.Deployment, userName
 		svc.Store.UpdateDeploymentStatus(deploy.ID, "failed")
 		return
 	}
-	svc.Store.UpdateDeploymentRunning(deploy.ID, result.ContainerID, result.HostPort)
-	svc.Proxy.AddRoute(deploy.Subdomain, result.HostPort, AccessControlFromDeployment(deploy))
+	svc.Store.UpdateDeploymentRunning(deploy.ID, result.InstanceID, result.Endpoint.Port)
+	svc.Proxy.AddRoute(deploy.Subdomain, result.Endpoint.Port, AccessControlFromDeployment(deploy))
 	log.Printf("[secret-rotate] %s restarted | user=%s", deploy.Subdomain, userName)
 }
 
@@ -199,7 +199,7 @@ func (svc *Service) SecretDelete(user *store.User, name string, global bool) err
 	}
 
 	// For global secrets, only the creator (or an admin) may delete.
-	if global && user.Role != "admin" {
+	if global && !IsAdmin(user) {
 		existing, _ := svc.Store.GetGlobalSecret(name)
 		if existing == nil {
 			return ErrNotFound("Secret not found.")

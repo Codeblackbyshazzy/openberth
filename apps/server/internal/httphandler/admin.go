@@ -399,7 +399,7 @@ func (h *Handlers) AdminRestore(w http.ResponseWriter, r *http.Request) {
 	// 1. Stop all running containers
 	deploys, _ := h.svc.Store.ListDeploymentsByStatus("running", "building", "updating")
 	for _, d := range deploys {
-		h.svc.Container.Destroy(d.ID)
+		h.svc.Runtime.Destroy(d.ID)
 	}
 
 	// 2. Remove all Caddy site configs

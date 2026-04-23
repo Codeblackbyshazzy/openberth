@@ -272,16 +272,16 @@ func (bt *Tracker) UnblockAll() {
 
 		port := deploy.Port
 		if deploy.Status != "running" {
-			containerStatus := bt.svc.Container.Status(deploy.ID)
+			containerStatus := bt.svc.Runtime.Status(deploy.ID)
 			if containerStatus == "running" {
-				actualPort := bt.svc.Container.InspectPort(deploy.ID)
+				actualPort := bt.svc.Runtime.Port(deploy.ID)
 				if actualPort > 0 {
 					port = actualPort
 				}
 				bt.svc.Store.UpdateDeploymentRunning(deploy.ID, deploy.ContainerID, port)
 				log.Printf("[bandwidth] Fixed stale status for %s (%s -> running)", subdomain, deploy.Status)
-			} else if bt.svc.Container.Restart(deploy.ID) {
-				actualPort := bt.svc.Container.InspectPort(deploy.ID)
+			} else if bt.svc.Runtime.Restart(deploy.ID) {
+				actualPort := bt.svc.Runtime.Port(deploy.ID)
 				if actualPort > 0 {
 					port = actualPort
 				}
@@ -352,16 +352,16 @@ func (bt *Tracker) restoreRoute(deployID, subdomain, reason string) {
 
 	port := deploy.Port
 	if deploy.Status != "running" {
-		containerStatus := bt.svc.Container.Status(deployID)
+		containerStatus := bt.svc.Runtime.Status(deployID)
 		if containerStatus == "running" {
-			actualPort := bt.svc.Container.InspectPort(deployID)
+			actualPort := bt.svc.Runtime.Port(deployID)
 			if actualPort > 0 {
 				port = actualPort
 			}
 			bt.svc.Store.UpdateDeploymentRunning(deployID, deploy.ContainerID, port)
 			log.Printf("[bandwidth] Fixed stale status for %s (%s -> running)", subdomain, deploy.Status)
-		} else if bt.svc.Container.Restart(deployID) {
-			actualPort := bt.svc.Container.InspectPort(deployID)
+		} else if bt.svc.Runtime.Restart(deployID) {
+			actualPort := bt.svc.Runtime.Port(deployID)
 			if actualPort > 0 {
 				port = actualPort
 			}

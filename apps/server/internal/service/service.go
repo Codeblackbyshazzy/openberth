@@ -2,9 +2,9 @@ package service
 
 import (
 	"github.com/AmirSoleimani/openberth/apps/server/internal/config"
-	"github.com/AmirSoleimani/openberth/apps/server/internal/container"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/datastore"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/proxy"
+	"github.com/AmirSoleimani/openberth/apps/server/internal/runtime"
 	"github.com/AmirSoleimani/openberth/apps/server/internal/store"
 )
 
@@ -21,7 +21,7 @@ type BandwidthManager interface {
 type Service struct {
 	Cfg       *config.Config
 	Store     *store.Store
-	Container *container.ContainerManager
+	Runtime   runtime.Runtime
 	Proxy     *proxy.ProxyManager
 	DataStore *datastore.Manager
 	Bandwidth BandwidthManager
@@ -29,11 +29,11 @@ type Service struct {
 
 // NewService creates a new Service. The BandwidthManager is set later
 // via SetBandwidth to break the circular dependency.
-func NewService(cfg *config.Config, s *store.Store, cm *container.ContainerManager, pm *proxy.ProxyManager, ds *datastore.Manager) *Service {
+func NewService(cfg *config.Config, s *store.Store, rt runtime.Runtime, pm *proxy.ProxyManager, ds *datastore.Manager) *Service {
 	return &Service{
 		Cfg:       cfg,
 		Store:     s,
-		Container: cm,
+		Runtime:   rt,
 		Proxy:     pm,
 		DataStore: ds,
 	}
