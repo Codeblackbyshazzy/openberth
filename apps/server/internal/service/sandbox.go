@@ -95,7 +95,7 @@ func (svc *Service) CreateSandbox(user *store.User, p SandboxCreateParams) (*Dep
 			FrameworkEnv: fw.Env,
 			BuildEnv:     buildEnvVars,
 			UserEnv:      envVars,
-			Memory:       p.Memory,
+			Memory:       svc.ResolveMemory(p.Memory),
 			NetworkQuota: resolvedQuota,
 		})
 		if err != nil {
